@@ -9,8 +9,5 @@ services:
     env_file:
       - .env
     volumes:
-      - scheduler-data:/data
+      - ./data:/data
     working_dir: /app
-
-volumes:
-  scheduler-data:
