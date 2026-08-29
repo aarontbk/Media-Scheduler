@@ -6,7 +6,7 @@ from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import update
 
-from app.config import get_settings
+from app.config import get_settings, get_active_settings
 from app.database import AsyncSessionLocal
 from app.models import ScheduledJob
 from app.jellyfin_client import JellyfinClient
@@ -20,7 +20,6 @@ scheduler: AsyncScheduler | None = None
 
 def create_scheduler() -> AsyncScheduler:
     """Create the APScheduler instance with persistent storage."""
-    settings = get_settings()
     # Use a separate SQLite file for APScheduler's internal data
     data_store = SQLAlchemyDataStore(engine_or_url="sqlite+aiosqlite:///data/apscheduler.db")
     return AsyncScheduler(data_store=data_store)
@@ -33,8 +32,17 @@ async def execute_playback(job_db_id: str, item_ids: list[str]) -> None:
     It handles TV wake-up, session discovery, and playback initiation.
     """
     logger.info(f"Executing playback job {job_db_id} with items {item_ids}")
-    jellyfin = JellyfinClient()
-    adb = ADBClient()
+    
+    async with AsyncSessionLocal() as session:
+        cfg = await get_active_settings(session)
+        
+    jellyfin = JellyfinClient(
+        base_url=cfg["jellyfin_url"],
+        api_key=cfg["jellyfin_api_key"],
+        user_id=cfg["jellyfin_user_id"],
+        tv_device_name=cfg["tv_device_name"],
+    )
+    adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
     error_msg = None
     
     try:

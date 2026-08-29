@@ -2,74 +2,302 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Scheduler</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Media Scheduler - Shabbat & TV Automation</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <h1>📺 Media Scheduler</h1>
-            <div class="tv-status" id="tvStatus">
-                <span class="status-dot" id="statusDot"></span>
-                <span class="status-text" id="statusText">Checking...</span>
+    <!-- Top Header -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">
+                <span class="brand-icon">📺</span>
+                <span class="brand-name">Media Scheduler</span>
+            </div>
+            
+            <div class="header-actions">
+                <button class="status-pill" id="tvStatusPill" title="Click to view TV connection details">
+                    <span class="status-dot" id="headerStatusDot"></span>
+                    <span class="status-label" id="headerStatusLabel">Checking TV...</span>
+                </button>
+                <button class="icon-btn" id="openSettingsBtn" title="TV & Server Settings">
+                    <span>⚙️</span>
+                </button>
             </div>
         </div>
     </header>
 
-    <main>
-        <!-- Search Section -->
-        <section class="section" id="searchSection">
-            <h2>Search Media</h2>
-            <div class="search-bar">
-                <input type="text" id="searchInput" placeholder="Search movies & shows..." autocomplete="off">
-                <select id="searchType">
-                    <option value="Movie,Series">All</option>
-                    <option value="Movie">Movies</option>
-                    <option value="Series">Series</option>
-                </select>
+    <!-- Setup Notice Banner (hidden when configured) -->
+    <div class="setup-banner hidden" id="setupBanner">
+        <div class="banner-content">
+            <span class="banner-icon">⚡</span>
+            <div class="banner-text">
+                <strong id="bannerTitle">Setup Required:</strong>
+                <span id="bannerMsg">Configure your TV IP address and Jellyfin connection to start scheduling.</span>
             </div>
-            <div class="results-grid" id="searchResults"></div>
-        </section>
+            <button class="btn btn-sm btn-primary" id="bannerActionBtn">Configure Now</button>
+        </div>
+    </div>
 
-        <!-- Series Drill-down (hidden by default) -->
-        <section class="section hidden" id="seriesSection">
-            <div class="section-header">
-                <h2 id="seriesTitle">Select Episode</h2>
-                <button class="btn btn-secondary" id="backToSearch">← Back</button>
-            </div>
-            <div class="seasons-bar" id="seasonsBar"></div>
-            <div class="results-grid" id="episodeResults"></div>
-        </section>
+    <!-- Main Content Container -->
+    <main class="app-main">
+        
+        <!-- Navigation Tabs: Browse / Timeline -->
+        <nav class="view-nav">
+            <button class="view-tab active" data-view="browser">
+                <span>🎬</span> Library & Search
+            </button>
+            <button class="view-tab" data-view="timeline">
+                <span>⏱️</span> Scheduled Jobs
+                <span class="tab-badge hidden" id="pendingCountBadge">0</span>
+            </button>
+        </nav>
 
-        <!-- Schedule Form (hidden by default) -->
-        <section class="section hidden" id="scheduleSection">
-            <h2>Schedule Playback</h2>
-            <div class="schedule-form">
-                <div class="selected-media" id="selectedMedia"></div>
-                <div class="form-group">
-                    <label for="scheduleTime">Playback Time</label>
-                    <input type="datetime-local" id="scheduleTime">
+        <!-- VIEW 1: Media Browser -->
+        <section class="view-section active" id="browserView">
+            
+            <!-- Search & Filters -->
+            <div class="browser-controls">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Search movies, TV shows..." autocomplete="off" autocorrect="off">
+                    <button class="clear-search-btn hidden" id="clearSearchBtn">✕</button>
                 </div>
-                <div class="form-actions">
-                    <button class="btn btn-primary" id="scheduleBtn">Schedule</button>
-                    <button class="btn btn-secondary" id="cancelSelect">Cancel</button>
+                
+                <div class="filter-chips">
+                    <button class="chip active" data-type="Movie,Series">All</button>
+                    <button class="chip" data-type="Series">TV Shows</button>
+                    <button class="chip" data-type="Movie">Movies</button>
+                    <button class="chip-refresh" id="refreshMediaBtn" title="Reload library">↻</button>
+                </div>
+            </div>
+
+            <!-- Media Grid -->
+            <div class="media-container" id="mediaContainer">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading your Jellyfin library...</p>
+                </div>
+            </div>
+
+            <!-- Series Drill-Down View (Inside Browser) -->
+            <div class="series-drilldown hidden" id="seriesView">
+                <div class="drilldown-header">
+                    <button class="back-btn" id="backToLibraryBtn">
+                        <span>←</span> Back to Library
+                    </button>
+                </div>
+
+                <div class="series-hero" id="seriesHero">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <div class="seasons-slider" id="seasonsSlider">
+                    <!-- Season buttons -->
+                </div>
+
+                <div class="episodes-list" id="episodesList">
+                    <!-- Episode cards -->
                 </div>
             </div>
         </section>
 
-        <!-- Timeline Section -->
-        <section class="section" id="timelineSection">
-            <div class="section-header">
-                <h2>Scheduled Playback</h2>
-                <button class="btn btn-secondary btn-sm" id="refreshTimeline">↻ Refresh</button>
+        <!-- VIEW 2: Schedule Timeline -->
+        <section class="view-section" id="timelineView">
+            <div class="section-title-row">
+                <h2>Scheduled Playback Timeline</h2>
+                <button class="btn btn-secondary btn-sm" id="refreshTimelineBtn">↻ Refresh</button>
             </div>
-            <div id="timeline" class="timeline"></div>
-            <p class="empty-state hidden" id="emptyTimeline">No scheduled playback yet.</p>
+            
+            <p class="section-subtitle">Playback triggers automatically at the scheduled time with automatic TV wake-up.</p>
+
+            <div class="timeline-list" id="timelineList">
+                <!-- Timeline items -->
+            </div>
+
+            <div class="empty-state hidden" id="emptyTimelineState">
+                <div class="empty-icon">📅</div>
+                <h3>No Scheduled Playback</h3>
+                <p>Select a movie or TV show episode from the Library to set up automatic playback.</p>
+                <button class="btn btn-primary" id="goToLibraryBtn">Browse Library</button>
+            </div>
         </section>
     </main>
 
-    <div class="toast hidden" id="toast"></div>
+    <!-- Schedule Modal / Drawer -->
+    <div class="modal-overlay hidden" id="scheduleModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="scheduleModalTitle">Schedule Playback</h3>
+                <button class="modal-close-btn" id="closeScheduleModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Selected Media Summary -->
+                <div class="selected-media-card" id="modalMediaCard">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Timing Selection -->
+                <div class="form-section">
+                    <label class="form-label" for="scheduleDatetime">Select Playback Time</label>
+                    <input type="datetime-local" class="form-input" id="scheduleDatetime">
+                    
+                    <div class="preset-times">
+                        <span class="preset-label">Quick Presets:</span>
+                        <div class="preset-buttons">
+                            <button class="btn-preset" data-offset="15">+15 min</button>
+                            <button class="btn-preset" data-offset="30">+30 min</button>
+                            <button class="btn-preset" data-preset="tonight-20">Tonight 20:00</button>
+                            <button class="btn-preset" data-preset="tonight-21">Tonight 21:30</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wake-up Notice -->
+                <div class="info-card">
+                    <span class="info-icon">💡</span>
+                    <p>The scheduler will connect via ADB 30 seconds before start time to wake your TCL TV screen and launch Jellyfin.</p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="instantPlayBtn">⚡ Play Now</button>
+                <button class="btn btn-primary" id="confirmScheduleBtn">📅 Schedule Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings & TV Setup Modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3>⚙️ TV & Server Settings</h3>
+                <button class="modal-close-btn" id="closeSettingsModal">✕</button>
+            </div>
+
+            <!-- Settings Tabs -->
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="tv-tab">📺 Android TV (ADB)</button>
+                <button class="settings-tab" data-tab="jellyfin-tab">🍇 Jellyfin Server</button>
+            </div>
+
+            <div class="modal-body">
+                
+                <!-- TAB 1: Android TV Connection -->
+                <div class="settings-panel active" id="tv-tab">
+                    
+                    <!-- Live ADB Status Box -->
+                    <div class="adb-status-box" id="adbStatusBox">
+                        <div class="status-box-header">
+                            <div class="status-indicator">
+                                <span class="status-dot" id="adbBoxDot"></span>
+                                <strong id="adbBoxTitle">Checking TV Status...</strong>
+                            </div>
+                            <button class="btn btn-sm btn-secondary" id="refreshAdbStatusBtn">↻ Check</button>
+                        </div>
+                        <p class="status-box-msg" id="adbBoxMessage">Connecting to TV...</p>
+
+                        <!-- Special Action Area for 'unauthorized' / 'prompt on screen' state -->
+                        <div class="tv-prompt-callout hidden" id="tvPromptCallout">
+                            <div class="prompt-icon">📺⚠️</div>
+                            <div class="prompt-text">
+                                <strong>LOOK AT YOUR TV SCREEN NOW!</strong>
+                                <p>A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV.</p>
+                                <p>👉 Use your remote to check <strong>"Always allow from this computer"</strong> and click <strong>Allow / OK</strong>.</p>
+                            </div>
+                            <button class="btn btn-primary btn-sm" id="verifyAuthBtn">🔄 I Allowed It (Verify)</button>
+                        </div>
+                    </div>
+
+                    <!-- TV Connection Form -->
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="tvIpInput">TCL TV IP Address</label>
+                            <input type="text" class="form-input" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
+                            <span class="form-hint">Found in TV Settings → Network & Internet → Wi-Fi / Ethernet Details.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="tvPortInput">ADB Port</label>
+                            <input type="number" class="form-input" id="tvPortInput" value="5555">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="form-label" for="tvNameInput">TV Device Name (in Jellyfin)</label>
+                            <input type="text" class="form-input" id="tvNameInput" placeholder="e.g. Living Room TV">
+                            <span class="form-hint">Used by Jellyfin to target the correct playback session.</span>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons-row">
+                        <button class="btn btn-primary" id="connectTvBtn">🔗 Connect / Pair TV</button>
+                        <button class="btn btn-secondary" id="saveTvSettingsBtn">Save Settings</button>
+                    </div>
+
+                    <!-- Test Actions (When TV is connected) -->
+                    <div class="test-actions-section">
+                        <h4>Test TV Controls:</h4>
+                        <div class="test-buttons-grid">
+                            <button class="btn btn-secondary btn-sm" id="testWakeBtn">⚡ Test Screen Wake</button>
+                            <button class="btn btn-secondary btn-sm" id="testLaunchAppBtn">🚀 Test Launch Jellyfin</button>
+                        </div>
+                    </div>
+
+                    <!-- Step-by-Step Setup Instructions Accordion -->
+                    <details class="setup-guide">
+                        <summary>📖 How to enable ADB Network Debugging on your Android TV</summary>
+                        <div class="guide-steps">
+                            <ol>
+                                <li><strong>Enable Developer Mode:</strong> On your TV, go to <em>Settings → System → About</em>. Scroll down to <strong>Android TV OS build</strong> and click it <strong>7 times</strong> until it says <em>"You are now a developer!"</em>.</li>
+                                <li><strong>Enable Network / USB Debugging:</strong> Go to <em>Settings → System → Developer options</em>. Toggle <strong>USB debugging</strong> and <strong>Network debugging</strong> to <strong>ON</strong>.</li>
+                                <li><strong>Enter TV IP:</strong> Look at your TV's IP address in Network settings and enter it in the box above.</li>
+                                <li><strong>Allow Connection:</strong> Click <strong>"Connect / Pair TV"</strong>. When the prompt appears on your TV screen, check <em>"Always allow"</em> and press OK.</li>
+                            </ol>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- TAB 2: Jellyfin Server Connection -->
+                <div class="settings-panel" id="jellyfin-tab">
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="jfUrlInput">Jellyfin Server URL</label>
+                        <input type="text" class="form-input" id="jfUrlInput" placeholder="http://192.168.1.50:8096 or http://media:8096">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="jfKeyInput">Jellyfin API Key</label>
+                        <input type="password" class="form-input" id="jfKeyInput" placeholder="Enter API Key">
+                        <span class="form-hint">Create in Jellyfin Dashboard → Administration → API Keys.</span>
+                    </div>
+
+                    <div class="action-buttons-row">
+                        <button class="btn btn-secondary" id="testJfBtn">🔍 Test Connection & Fetch Users</button>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label class="form-label" for="jfUserSelect">Target User Account</label>
+                        <select class="form-input" id="jfUserSelect">
+                            <option value="">-- Click 'Test Connection' to load users --</option>
+                        </select>
+                        <span class="form-hint">The user profile used for browsing library and playback state.</span>
+                    </div>
+
+                    <div class="action-buttons-row" style="margin-top: 1.5rem;">
+                        <button class="btn btn-primary" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script src="/static/app.js"></script>
 </body>

@@ -20,3 +20,10 @@ class ScheduledJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     apscheduler_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+    
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+
