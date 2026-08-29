@@ -59,6 +59,14 @@ class ScheduleCreate(BaseModel):
     time_of_day: str | None = None  # e.g. "20:30"
     auto_turn_off: bool = True  # Auto-turn off TV after playback finishes
 
+class ScheduleUpdate(BaseModel):
+    name: str | None = None
+    scheduled_time: datetime | None = None
+    schedule_type: str | None = None
+    days_of_week: str | None = None
+    time_of_day: str | None = None
+    auto_turn_off: bool | None = None
+
 class ScheduleResponse(BaseModel):
     id: str
     name: str

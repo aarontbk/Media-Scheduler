@@ -28,6 +28,7 @@ const state = {
         adb_message: '',
     },
     scheduledJobs: [],
+    editingScheduleJob: null,
     searchDebounceTimer: null,
     playlistSearchDebounceTimer: null,
 };
@@ -422,6 +423,19 @@ const api = {
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail || 'Failed to create schedule');
+        }
+        return await res.json();
+    },
+
+    async updateSchedule(jobId, data) {
+        const res = await fetch(`/api/schedule/${jobId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to update schedule');
         }
         return await res.json();
     },
@@ -1171,10 +1185,16 @@ async function handleConfirmAddToPlaylist() {
 
 // --- Schedule Modal & Timing ---
 function openScheduleModal(targetData) {
+    state.editingScheduleJob = null;
     state.selectedMedia = targetData;
     const isPlaylist = targetData.target_type === 'playlist';
     const isEpisode = targetData.type === 'Episode' || targetData.item_type === 'Episode' || (targetData.name && targetData.name.includes(' - S'));
     const runtimeFormatted = formatRuntime(targetData.runtime || targetData.total_runtime_minutes);
+
+    const titleEl = document.getElementById('scheduleModalTitle');
+    if (titleEl) titleEl.textContent = 'Schedule Playback';
+    elements.confirmScheduleBtn.textContent = 'Schedule Job';
+    elements.instantPlayBtn.classList.remove('hidden');
 
     let posterHtml = '';
     if (targetData.tag) {
@@ -1206,6 +1226,65 @@ function openScheduleModal(targetData) {
     elements.scheduleTimeOfDay.value = `${defH}:${defM}`;
     elements.scheduleAutoTurnOff.checked = true;
 
+    elements.scheduleModal.classList.remove('hidden');
+}
+
+function openEditScheduleModal(job) {
+    state.editingScheduleJob = job;
+    state.selectedMedia = {
+        id: job.jellyfin_item_id,
+        name: job.name,
+        target_type: job.target_type,
+        type: job.item_type,
+        tag: job.image_tag,
+    };
+
+    const isPlaylist = job.target_type === 'playlist' || job.item_type === 'Playlist';
+    const isEpisode = job.item_type === 'Episode' || (job.name && job.name.includes(' - S'));
+
+    const titleEl = document.getElementById('scheduleModalTitle');
+    if (titleEl) titleEl.textContent = `Edit Schedule: ${job.name}`;
+    elements.confirmScheduleBtn.textContent = 'Save Changes';
+    elements.instantPlayBtn.classList.add('hidden');
+
+    let posterHtml = '';
+    if (job.image_tag) {
+        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+    } else if (isEpisode) {
+        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(job.name))}</div>`;
+    } else if (isPlaylist) {
+        posterHtml = `<div class="modal-media-fallback">Playlist</div>`;
+    } else {
+        posterHtml = `<div class="modal-media-fallback">${job.item_type === 'Movie' ? 'Movie' : 'Series'}</div>`;
+    }
+
+    elements.modalMediaCard.innerHTML = `
+        ${posterHtml}
+        <div class="modal-media-info">
+            <h4>${escapeHtml(job.name)}</h4>
+            <p>${isPlaylist ? 'Custom Playlist' : (job.item_type || 'Media')}</p>
+        </div>
+    `;
+
+    const freq = job.schedule_type || 'once';
+    setRecurrenceFrequency(freq);
+
+    if (freq === 'once') {
+        const dt = job.scheduled_time ? new Date(job.scheduled_time) : new Date();
+        elements.scheduleDatetime.value = toLocalDatetimeString(dt);
+    } else {
+        elements.scheduleTimeOfDay.value = job.time_of_day || '20:00';
+        if (freq === 'weekly') {
+            elements.scheduleWeeklyDay.value = job.days_of_week || 'fri';
+        } else if (freq === 'custom_days') {
+            const activeDays = (job.days_of_week || '').split(',');
+            elements.customDaysGroup.querySelectorAll('input').forEach(inp => {
+                inp.checked = activeDays.includes(inp.value);
+            });
+        }
+    }
+
+    elements.scheduleAutoTurnOff.checked = job.auto_turn_off !== false;
     elements.scheduleModal.classList.remove('hidden');
 }
 
@@ -1275,7 +1354,7 @@ async function handleConfirmSchedule() {
     }
 
     elements.confirmScheduleBtn.disabled = true;
-    elements.confirmScheduleBtn.textContent = 'Scheduling...';
+    elements.confirmScheduleBtn.textContent = 'Saving...';
 
     const payload = {
         name: state.selectedMedia.name,
@@ -1291,15 +1370,20 @@ async function handleConfirmSchedule() {
     };
 
     try {
-        await api.createSchedule(payload);
-        showToast('Playback scheduled successfully', 'success');
+        if (state.editingScheduleJob) {
+            await api.updateSchedule(state.editingScheduleJob.id, payload);
+            showToast('Scheduled job updated successfully', 'success');
+        } else {
+            await api.createSchedule(payload);
+            showToast('Playback scheduled successfully', 'success');
+        }
         elements.scheduleModal.classList.add('hidden');
         switchView('timeline');
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
         elements.confirmScheduleBtn.disabled = false;
-        elements.confirmScheduleBtn.textContent = 'Schedule Job';
+        elements.confirmScheduleBtn.textContent = state.editingScheduleJob ? 'Save Changes' : 'Schedule Job';
     }
 }
 
@@ -1397,13 +1481,22 @@ function renderTimeline(jobs) {
                 ${job.error_message ? `<div style="color: var(--status-danger); font-size: 0.75rem; margin-top: 0.25rem;">${escapeHtml(job.error_message)}</div>` : ''}
             </div>
 
-            <div class="timeline-actions">
+            <div class="timeline-actions" style="display: flex; gap: 0.4rem;">
+                <button class="btn btn-sm btn-secondary edit-job-btn" data-id="${job.id}">Edit</button>
                 <button class="btn btn-sm btn-danger cancel-job-btn" data-id="${job.id}">
                     ${job.status === 'pending' ? 'Cancel' : 'Delete'}
                 </button>
             </div>
         </div>
     `;}).join('');
+
+    elements.timelineList.querySelectorAll('.edit-job-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const jobId = btn.dataset.id;
+            const job = state.scheduledJobs.find(j => j.id === jobId);
+            if (job) openEditScheduleModal(job);
+        });
+    });
 
     elements.timelineList.querySelectorAll('.cancel-job-btn').forEach(btn => {
         btn.addEventListener('click', async () => {

@@ -14,7 +14,7 @@ from app.config import get_settings, get_active_settings, save_active_settings
 from app.database import init_db, get_db
 from app.models import ScheduledJob, Playlist, PlaylistItem
 from app.schemas import (
-    ScheduleCreate, ScheduleResponse, MediaSearchResult,
+    ScheduleCreate, ScheduleUpdate, ScheduleResponse, MediaSearchResult,
     SessionInfo, TVStatus, PlayNowRequest,
     SeasonResult, EpisodeResult, SettingsUpdate, SettingsResponse,
     ADBConnectRequest, ADBStatusResponse, JellyfinUser, JellyfinTestResponse,
@@ -540,6 +540,66 @@ async def list_schedules(db: AsyncSession = Depends(get_db)):
         select(ScheduledJob).order_by(ScheduledJob.scheduled_time.asc())
     )
     return result.scalars().all()
+
+
+@app.put("/api/schedule/{job_id}", response_model=ScheduleResponse)
+async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)):
+    """Update and reschedule an existing job."""
+    result = await db.execute(select(ScheduledJob).where(ScheduledJob.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Cancel previous APScheduler job
+    if job.apscheduler_job_id:
+        await sched_module.cancel_job(job.apscheduler_job_id)
+
+    # Apply updates
+    if data.name is not None:
+        job.name = data.name.strip()
+    if data.schedule_type is not None:
+        job.schedule_type = data.schedule_type
+    if data.days_of_week is not None:
+        job.days_of_week = data.days_of_week
+    if data.time_of_day is not None:
+        job.time_of_day = data.time_of_day
+    if data.auto_turn_off is not None:
+        job.auto_turn_off = data.auto_turn_off
+
+    # Calculate scheduled time
+    if data.scheduled_time is not None:
+        job.scheduled_time = data.scheduled_time
+    elif job.schedule_type != "once" and job.time_of_day:
+        parts = job.time_of_day.split(":")
+        now = datetime.utcnow()
+        job.scheduled_time = now.replace(
+            hour=int(parts[0]), minute=int(parts[1]) if len(parts) > 1 else 0, second=0, microsecond=0
+        )
+
+    job.status = "pending"
+    job.error_message = None
+
+    # Reschedule with APScheduler
+    ap_job_id = await sched_module.schedule_playback(
+        job_db_id=job.id,
+        target_type=job.target_type,
+        target_id=job.jellyfin_item_id,
+        scheduled_time=job.scheduled_time,
+        schedule_type=job.schedule_type,
+        days_of_week=job.days_of_week,
+        time_of_day=job.time_of_day,
+        auto_turn_off=job.auto_turn_off,
+    )
+
+    if ap_job_id:
+        job.apscheduler_job_id = ap_job_id
+    else:
+        job.status = "failed"
+        job.error_message = "Failed to register with scheduler"
+
+    await db.commit()
+    await db.refresh(job)
+    return job
 
 
 @app.delete("/api/schedule/{job_id}", status_code=204)
