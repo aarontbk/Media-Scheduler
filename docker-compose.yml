@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  media-scheduler:
+    build: .
+    container_name: media-scheduler
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - scheduler-data:/data
+    working_dir: /app
+
+volumes:
+  scheduler-data:

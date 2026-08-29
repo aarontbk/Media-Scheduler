@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Scheduler</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>📺 Media Scheduler</h1>
+            <div class="tv-status" id="tvStatus">
+                <span class="status-dot" id="statusDot"></span>
+                <span class="status-text" id="statusText">Checking...</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Search Section -->
+        <section class="section" id="searchSection">
+            <h2>Search Media</h2>
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Search movies & shows..." autocomplete="off">
+                <select id="searchType">
+                    <option value="Movie,Series">All</option>
+                    <option value="Movie">Movies</option>
+                    <option value="Series">Series</option>
+                </select>
+            </div>
+            <div class="results-grid" id="searchResults"></div>
+        </section>
+
+        <!-- Series Drill-down (hidden by default) -->
+        <section class="section hidden" id="seriesSection">
+            <div class="section-header">
+                <h2 id="seriesTitle">Select Episode</h2>
+                <button class="btn btn-secondary" id="backToSearch">← Back</button>
+            </div>
+            <div class="seasons-bar" id="seasonsBar"></div>
+            <div class="results-grid" id="episodeResults"></div>
+        </section>
+
+        <!-- Schedule Form (hidden by default) -->
+        <section class="section hidden" id="scheduleSection">
+            <h2>Schedule Playback</h2>
+            <div class="schedule-form">
+                <div class="selected-media" id="selectedMedia"></div>
+                <div class="form-group">
+                    <label for="scheduleTime">Playback Time</label>
+                    <input type="datetime-local" id="scheduleTime">
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="scheduleBtn">Schedule</button>
+                    <button class="btn btn-secondary" id="cancelSelect">Cancel</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Timeline Section -->
+        <section class="section" id="timelineSection">
+            <div class="section-header">
+                <h2>Scheduled Playback</h2>
+                <button class="btn btn-secondary btn-sm" id="refreshTimeline">↻ Refresh</button>
+            </div>
+            <div id="timeline" class="timeline"></div>
+            <p class="empty-state hidden" id="emptyTimeline">No scheduled playback yet.</p>
+        </section>
+    </main>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
