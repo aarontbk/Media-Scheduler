@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import DeclarativeBase
 from app.config import get_settings
 import os
+import re
 
 class Base(DeclarativeBase):
     pass
@@ -9,10 +10,18 @@ class Base(DeclarativeBase):
 def get_engine():
     settings = get_settings()
     db_url = settings.database_url
-    # Ensure data directory exists
+    
+    # In container with /data mount, ensure absolute path so sqlite uses /data/scheduler.db
+    if os.path.exists("/data") and "///data/" in db_url:
+        db_url = db_url.replace("///data/", "////data/")
+        
+    # Extract file path and ensure directory exists
     if "sqlite" in db_url:
-        db_path = db_url.split("///")[-1]
-        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+        match = re.search(r"sqlite(?:\+aiosqlite)?:///(.+)$", db_url)
+        if match:
+            db_path = match.group(1)
+            os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+            
     return create_async_engine(db_url, echo=False)
 
 engine = get_engine()
@@ -26,6 +35,6 @@ async def get_db():
             await session.close()
 
 async def init_db():
+    from app.models import ScheduledJob, SystemSetting  # noqa
     async with engine.begin() as conn:
-        from app.models import ScheduledJob, SystemSetting  # noqa
         await conn.run_sync(Base.metadata.create_all)

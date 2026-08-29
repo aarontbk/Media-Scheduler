@@ -20,8 +20,9 @@ scheduler: AsyncScheduler | None = None
 
 def create_scheduler() -> AsyncScheduler:
     """Create the APScheduler instance with persistent storage."""
-    # Use a separate SQLite file for APScheduler's internal data
-    data_store = SQLAlchemyDataStore(engine_or_url="sqlite+aiosqlite:///data/apscheduler.db")
+    import os
+    db_url = "sqlite+aiosqlite:////data/apscheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/apscheduler.db"
+    data_store = SQLAlchemyDataStore(engine_or_url=db_url)
     return AsyncScheduler(data_store=data_store)
 
 

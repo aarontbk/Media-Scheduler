@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     adb_port: int = 5555
     
     # Database
-    database_url: str = "sqlite+aiosqlite:///data/scheduler.db"
+    database_url: str = "sqlite+aiosqlite:////data/scheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/scheduler.db"
     
     # Server
     host: str = "0.0.0.0"
