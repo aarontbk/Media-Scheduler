@@ -24,11 +24,18 @@ class ADBClient:
         """Run an ADB command and return (returncode, stdout, stderr)."""
         cmd = ["adb", *args]
         logger.debug(f"Running ADB: {' '.join(cmd)}")
+        adb_env = os.environ.copy()
+        if os.path.exists("/data"):
+            adb_env["HOME"] = "/data"
+            adb_env["ADB_VENDOR_KEYS"] = "/data/.android/adbkey"
+            os.makedirs("/data/.android", exist_ok=True)
+            
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=adb_env,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             return proc.returncode, stdout.decode("utf-8", errors="ignore").strip(), stderr.decode("utf-8", errors="ignore").strip()

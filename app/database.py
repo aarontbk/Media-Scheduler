@@ -34,7 +34,29 @@ async def get_db():
         finally:
             await session.close()
 
+def _migrate_db(sync_conn):
+    """Automatically add any missing columns to existing SQLite tables."""
+    try:
+        cursor = sync_conn.connection.cursor()
+        cursor.execute("PRAGMA table_info(scheduled_jobs)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if cols:
+            if "target_type" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN target_type VARCHAR(32) DEFAULT 'media'")
+            if "schedule_type" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN schedule_type VARCHAR(32) DEFAULT 'once'")
+            if "days_of_week" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN days_of_week VARCHAR(64)")
+            if "time_of_day" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN time_of_day VARCHAR(16)")
+            if "auto_turn_off" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN auto_turn_off BOOLEAN DEFAULT 1")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Schema migration note: {e}")
+
 async def init_db():
     from app.models import ScheduledJob, SystemSetting, Playlist, PlaylistItem  # noqa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_db)

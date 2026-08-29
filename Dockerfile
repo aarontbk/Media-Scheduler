@@ -15,8 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY frontend/ ./frontend/
 
-# Create data directory for SQLite
-RUN mkdir -p /data
+# Create data directory for SQLite and persistent ADB keys
+RUN mkdir -p /data/.android
+ENV HOME=/data
+ENV ADB_VENDOR_KEYS=/data/.android/adbkey
 
 EXPOSE 8081
 

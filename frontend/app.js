@@ -716,8 +716,9 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
 
         elements.episodesList.innerHTML = episodes.map(ep => {
             const runtimeText = formatRuntime(ep.runtime_minutes);
+            const epCode = `S${ep.season_number || 1}E${ep.episode_number || 1}`;
             return `
-            <div class="episode-card" data-id="${ep.id}" data-name="${escapeHtml(state.currentSeries.name)} - S${ep.season_number || 1}E${ep.episode_number || 1}: ${escapeHtml(ep.name)}" data-tag="${ep.image_tag || state.currentSeries.tag || ''}" data-type="Episode" data-runtime="${ep.runtime_minutes || ''}">
+            <div class="episode-card" data-id="${ep.id}" data-name="${escapeHtml(state.currentSeries.name)} - ${epCode}: ${escapeHtml(ep.name)}" data-tag="${ep.image_tag || ''}" data-type="Episode" data-runtime="${ep.runtime_minutes || ''}">
                 <div class="ep-num-box">
                     E${ep.episode_number || '1'}
                 </div>
@@ -857,12 +858,20 @@ function renderPlaylistItemsList(items) {
 
     elements.playlistItemsList.innerHTML = items.map((item, idx) => {
         const itemRuntime = formatRuntime(item.runtime_minutes);
+        const isEpisode = item.item_type === 'Episode' || (item.name && item.name.includes(' - S'));
+        let itemPosterHtml = '';
+        if (item.image_tag) {
+            itemPosterHtml = `<img class="playlist-item-poster" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">`;
+        } else if (isEpisode) {
+            itemPosterHtml = `<div class="playlist-item-fallback ep">${escapeHtml(extractEpLabel(item.name))}</div>`;
+        } else {
+            itemPosterHtml = `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? '🎬' : '📺'}</div>`;
+        }
+
         return `
         <div class="playlist-item-row" data-id="${item.id}" data-idx="${idx}">
             <div class="playlist-item-order">${idx + 1}</div>
-            ${item.image_tag 
-                ? `<img class="playlist-item-poster" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
-                : `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? '🎬' : '📺'}</div>`}
+            ${itemPosterHtml}
             <div class="playlist-item-info">
                 <div class="playlist-item-title">${escapeHtml(item.name)}</div>
                 <div class="playlist-item-meta">${item.item_type || 'Media'} ${itemRuntime ? `• ${itemRuntime}` : ''}</div>
@@ -921,15 +930,29 @@ function renderPlaylistItemsList(items) {
     });
 }
 
+function extractEpLabel(name) {
+    if (!name) return 'EP';
+    const match = name.match(/S\d+E\d+|E\d+/i);
+    return match ? match[0].toUpperCase() : 'EP';
+}
+
 // --- Add To Playlist Modal ---
 async function openAddToPlaylistModal(mediaData) {
     state.targetForPlaylist = mediaData;
     const runtimeFormatted = formatRuntime(mediaData.runtime);
 
+    const isEpisode = mediaData.type === 'Episode' || mediaData.item_type === 'Episode' || (mediaData.name && mediaData.name.includes(' - S'));
+    let posterHtml = '';
+    if (mediaData.tag) {
+        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(mediaData.id, mediaData.tag)}" alt="${escapeHtml(mediaData.name)}">`;
+    } else if (isEpisode) {
+        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(mediaData.name))}</div>`;
+    } else {
+        posterHtml = `<div class="modal-media-fallback">${mediaData.type === 'Movie' ? '🎬' : '📺'}</div>`;
+    }
+
     elements.addToPlaylistMediaCard.innerHTML = `
-        ${mediaData.tag 
-            ? `<img class="modal-media-poster" src="${getImageUrl(mediaData.id, mediaData.tag)}" alt="${escapeHtml(mediaData.name)}">` 
-            : ''}
+        ${posterHtml}
         <div class="modal-media-info">
             <h4>${escapeHtml(mediaData.name)}</h4>
             <p>${mediaData.type || 'Media'} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
@@ -998,12 +1021,22 @@ async function handleConfirmAddToPlaylist() {
 function openScheduleModal(targetData) {
     state.selectedMedia = targetData;
     const isPlaylist = targetData.target_type === 'playlist';
+    const isEpisode = targetData.type === 'Episode' || targetData.item_type === 'Episode' || (targetData.name && targetData.name.includes(' - S'));
     const runtimeFormatted = formatRuntime(targetData.runtime || targetData.total_runtime_minutes);
 
+    let posterHtml = '';
+    if (targetData.tag) {
+        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(targetData.id, targetData.tag)}" alt="${escapeHtml(targetData.name)}">`;
+    } else if (isEpisode) {
+        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(targetData.name))}</div>`;
+    } else if (isPlaylist) {
+        posterHtml = `<div class="modal-media-fallback">📑</div>`;
+    } else {
+        posterHtml = `<div class="modal-media-fallback">${targetData.type === 'Movie' ? '🎬' : '📺'}</div>`;
+    }
+
     elements.modalMediaCard.innerHTML = `
-        ${targetData.tag 
-            ? `<img class="modal-media-poster" src="${getImageUrl(targetData.id, targetData.tag)}" alt="${escapeHtml(targetData.name)}">` 
-            : `<div class="modal-media-fallback">${isPlaylist ? '📑' : '🎬'}</div>`}
+        ${posterHtml}
         <div class="modal-media-info">
             <h4>${escapeHtml(targetData.name)}</h4>
             <p>${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
@@ -1183,13 +1216,20 @@ function renderTimeline(jobs) {
         }
 
         const isPlaylist = job.target_type === 'playlist' || job.item_type === 'Playlist';
+        const isEpisode = job.item_type === 'Episode' || (job.name && job.name.includes(' - S'));
+        let timelinePosterHtml = '';
+        if (job.image_tag) {
+            timelinePosterHtml = `<img src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+        } else if (isEpisode) {
+            timelinePosterHtml = `<div class="timeline-fallback ep">${escapeHtml(extractEpLabel(job.name))}</div>`;
+        } else {
+            timelinePosterHtml = `<div class="timeline-fallback">${isPlaylist ? '📑' : '🎬'}</div>`;
+        }
 
         return `
         <div class="timeline-card ${job.status}" data-id="${job.id}">
             <div class="timeline-poster">
-                ${job.image_tag 
-                    ? `<img src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">` 
-                    : `<div class="timeline-fallback">${isPlaylist ? '📑' : '🎬'}</div>`}
+                ${timelinePosterHtml}
             </div>
             
             <div class="timeline-details">
