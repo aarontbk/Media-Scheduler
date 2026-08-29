@@ -17,6 +17,7 @@ const state = {
         tv_device_name: '',
         tv_ip: '',
         adb_port: 5555,
+        app_timezone: 'Asia/Jerusalem',
         jellyfin_connected: false,
         adb_is_ready: false,
     },
@@ -28,6 +29,7 @@ const state = {
     },
     scheduledJobs: [],
     searchDebounceTimer: null,
+    playlistSearchDebounceTimer: null,
 };
 
 // --- DOM Elements Cache ---
@@ -71,6 +73,7 @@ const elements = {
     createFirstPlaylistBtn: document.getElementById('createFirstPlaylistBtn'),
     playlistDetailView: document.getElementById('playlistDetailView'),
     backToPlaylistsBtn: document.getElementById('backToPlaylistsBtn'),
+    openAddItemsToPlaylistBtn: document.getElementById('openAddItemsToPlaylistBtn'),
     editPlaylistInfoBtn: document.getElementById('editPlaylistInfoBtn'),
     deletePlaylistBtn: document.getElementById('deletePlaylistBtn'),
     playlistHero: document.getElementById('playlistHero'),
@@ -78,7 +81,15 @@ const elements = {
     schedulePlaylistBtn: document.getElementById('schedulePlaylistBtn'),
     playlistItemsList: document.getElementById('playlistItemsList'),
 
-    // Add to Playlist Modal
+    // Browse & Add Items Modal (inside playlist detail)
+    browseAddItemsModal: document.getElementById('browseAddItemsModal'),
+    browseAddItemsModalTitle: document.getElementById('browseAddItemsModalTitle'),
+    closeBrowseAddItemsModal: document.getElementById('closeBrowseAddItemsModal'),
+    closeBrowseAddItemsBtn: document.getElementById('closeBrowseAddItemsBtn'),
+    playlistSearchInput: document.getElementById('playlistSearchInput'),
+    playlistPickerContainer: document.getElementById('playlistPickerContainer'),
+
+    // Add to Playlist Modal (from library cards)
     addToPlaylistModal: document.getElementById('addToPlaylistModal'),
     closeAddToPlaylistModal: document.getElementById('closeAddToPlaylistModal'),
     addToPlaylistMediaCard: document.getElementById('addToPlaylistMediaCard'),
@@ -148,6 +159,14 @@ const elements = {
     testJfBtn: document.getElementById('testJfBtn'),
     saveJfSettingsBtn: document.getElementById('saveJfSettingsBtn'),
 
+    // Timezone Setup Fields
+    timezoneSelect: document.getElementById('timezoneSelect'),
+    browserTzHint: document.getElementById('browserTzHint'),
+    browserClockPreview: document.getElementById('browserClockPreview'),
+    serverClockPreview: document.getElementById('serverClockPreview'),
+    saveTimezoneBtn: document.getElementById('saveTimezoneBtn'),
+    autoDetectTzBtn: document.getElementById('autoDetectTzBtn'),
+
     toastContainer: document.getElementById('toastContainer'),
 };
 
@@ -181,6 +200,12 @@ function formatRuntime(minutes) {
         return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
     }
     return `${m}m`;
+}
+
+function extractEpLabel(name) {
+    if (!name) return 'EP';
+    const match = name.match(/S\d+E\d+|E\d+/i);
+    return match ? match[0].toUpperCase() : 'EP';
 }
 
 function formatDateTime(isoStr) {
@@ -432,6 +457,8 @@ async function initApp() {
 
     // Start background TV status polling every 25 seconds
     setInterval(updateTvStatusUI, 25000);
+    // Start clock updates
+    setInterval(updateClockPreviews, 1000);
 }
 
 async function loadInitialSettings() {
@@ -445,13 +472,35 @@ async function loadInitialSettings() {
         elements.jfUrlInput.value = settings.jellyfin_url || '';
         elements.jfKeyInput.value = settings.jellyfin_api_key || '';
 
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
+        elements.browserTzHint.textContent = `Browser detected: ${browserTz}`;
+        elements.timezoneSelect.value = settings.app_timezone || browserTz || 'Asia/Jerusalem';
+
         if (settings.jellyfin_users && settings.jellyfin_users.length > 0) {
             populateUsersDropdown(settings.jellyfin_users, settings.jellyfin_user_id);
         }
 
         updateTvStatusUI();
+        updateClockPreviews();
     } catch (err) {
         console.warn('Settings load notice:', err);
+    }
+}
+
+function updateClockPreviews() {
+    const now = new Date();
+    const tz = elements.timezoneSelect ? elements.timezoneSelect.value : (state.settings.app_timezone || 'Asia/Jerusalem');
+    
+    if (elements.browserClockPreview) {
+        elements.browserClockPreview.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ` (${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
+    }
+    
+    if (elements.serverClockPreview) {
+        try {
+            elements.serverClockPreview.value = now.toLocaleTimeString([], { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ` (${tz})`;
+        } catch (e) {
+            elements.serverClockPreview.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
     }
 }
 
@@ -496,22 +545,22 @@ async function updateTvStatusUI() {
 }
 
 function renderAdbStatusBox(status) {
-    const state = status.adb_state || 'offline';
-    elements.adbBoxDot.className = `status-dot ${status.adb_reachable ? 'connected' : (state === 'unauthorized' ? 'partial' : 'offline')}`;
+    const st = status.adb_state || 'offline';
+    elements.adbBoxDot.className = `status-dot ${status.adb_reachable ? 'connected' : (st === 'unauthorized' ? 'partial' : 'offline')}`;
     
-    if (state === 'device') {
+    if (st === 'device') {
         elements.adbBoxTitle.textContent = '🟢 TV Connected & Authorized';
         elements.adbBoxMessage.textContent = status.adb_message || 'The TV is authorized and ready for automated wake-up, playback, and auto-sleep.';
         elements.tvPromptCallout.classList.add('hidden');
-    } else if (state === 'unauthorized') {
+    } else if (st === 'unauthorized') {
         elements.adbBoxTitle.textContent = '🟡 Authorization Required';
         elements.adbBoxMessage.textContent = 'Connection initiated, but waiting for permission on the TV.';
         elements.tvPromptCallout.classList.remove('hidden');
-    } else if (state === 'cannot_connect') {
+    } else if (st === 'cannot_connect') {
         elements.adbBoxTitle.textContent = '🔴 Cannot Reach TV';
         elements.adbBoxMessage.textContent = status.adb_message;
         elements.tvPromptCallout.classList.add('hidden');
-    } else if (state === 'not_configured') {
+    } else if (st === 'not_configured') {
         elements.adbBoxTitle.textContent = '⚙️ TV IP Not Configured';
         elements.adbBoxMessage.textContent = 'Enter your TV IP address below and click Connect.';
         elements.tvPromptCallout.classList.add('hidden');
@@ -601,7 +650,6 @@ function renderMediaGrid(items) {
 
     // Attach click listeners to cards
     elements.mediaContainer.querySelectorAll('.media-card').forEach(card => {
-        // Poster / card click
         card.querySelector('.poster-wrapper').addEventListener('click', (e) => {
             e.stopPropagation();
             const data = card.dataset;
@@ -612,7 +660,6 @@ function renderMediaGrid(items) {
             }
         });
 
-        // Title click
         card.querySelector('.card-title').addEventListener('click', (e) => {
             e.stopPropagation();
             const data = card.dataset;
@@ -623,7 +670,6 @@ function renderMediaGrid(items) {
             }
         });
 
-        // Schedule button click
         card.querySelector('.action-schedule-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             const data = card.dataset;
@@ -634,7 +680,6 @@ function renderMediaGrid(items) {
             }
         });
 
-        // Add to playlist button click
         card.querySelector('.action-playlist-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             const data = card.dataset;
@@ -807,11 +852,63 @@ function renderPlaylistsGrid(playlists) {
                 <span class="playlist-meta-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
                 <span>⏱️ ${totalDuration}</span>
             </div>
+            <div class="playlist-card-actions">
+                <button class="btn btn-sm btn-primary action-card-edit" data-id="${pl.id}">✏️ Edit</button>
+                <button class="btn btn-sm btn-secondary action-card-play" data-id="${pl.id}">⚡ Play</button>
+                <button class="btn btn-sm btn-secondary action-card-sched" data-id="${pl.id}">📅 Schedule</button>
+                <button class="btn btn-sm btn-danger action-card-del" data-id="${pl.id}" title="Delete">🗑️</button>
+            </div>
         </div>
     `;}).join('');
 
     elements.playlistsGrid.querySelectorAll('.playlist-card').forEach(card => {
-        card.addEventListener('click', () => openPlaylistDetail(card.dataset.id));
+        const id = card.dataset.id;
+        const pl = state.playlists.find(p => p.id === id);
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.playlist-card-actions')) return;
+            openPlaylistDetail(id);
+        });
+
+        card.querySelector('.action-card-edit')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openPlaylistDetail(id);
+        });
+
+        card.querySelector('.action-card-play')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                await api.playPlaylistNow(id);
+                showToast(`Playing "${pl?.name || 'Playlist'}" on TV!`, 'success');
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+
+        card.querySelector('.action-card-sched')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (pl) {
+                openScheduleModal({
+                    id: pl.id,
+                    name: pl.name,
+                    total_runtime_minutes: pl.total_runtime_minutes,
+                    target_type: 'playlist',
+                });
+            }
+        });
+
+        card.querySelector('.action-card-del')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (confirm(`Are you sure you want to delete playlist "${pl?.name || 'this playlist'}"?`)) {
+                try {
+                    await api.deletePlaylist(id);
+                    showToast('Playlist deleted', 'success');
+                    loadPlaylists();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            }
+        });
     });
 }
 
@@ -850,7 +947,8 @@ function renderPlaylistItemsList(items) {
             <div class="empty-state">
                 <div class="empty-icon">📭</div>
                 <h3>Playlist is Empty</h3>
-                <p>Browse your library and click "Add to Playlist" on any movie or episode.</p>
+                <p>Click "➕ Add Shows / Movies" above to add items to this playlist.</p>
+                <button class="btn btn-primary btn-sm" onclick="openBrowseAddItemsModal()">➕ Add Shows / Movies</button>
             </div>
         `;
         return;
@@ -930,13 +1028,78 @@ function renderPlaylistItemsList(items) {
     });
 }
 
-function extractEpLabel(name) {
-    if (!name) return 'EP';
-    const match = name.match(/S\d+E\d+|E\d+/i);
-    return match ? match[0].toUpperCase() : 'EP';
+// --- Browse & Add Items to Playlist Modal ---
+async function openBrowseAddItemsModal() {
+    if (!state.currentPlaylist) return;
+    elements.browseAddItemsModalTitle.textContent = `➕ Add Media to "${state.currentPlaylist.name}"`;
+    elements.playlistSearchInput.value = '';
+    elements.browseAddItemsModal.classList.remove('hidden');
+    loadPlaylistPickerResults('');
 }
 
-// --- Add To Playlist Modal ---
+async function loadPlaylistPickerResults(query = '') {
+    elements.playlistPickerContainer.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Searching media...</p></div>';
+
+    try {
+        const items = await api.fetchMedia(query, 'Movie,Series');
+        if (!items || items.length === 0) {
+            elements.playlistPickerContainer.innerHTML = '<p class="empty-state">No media found.</p>';
+            return;
+        }
+
+        elements.playlistPickerContainer.innerHTML = items.map(item => {
+            const runtimeText = formatRuntime(item.runtime_minutes);
+            return `
+            <div class="picker-item-row" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-runtime="${item.runtime_minutes || ''}">
+                <div class="picker-item-left">
+                    ${item.image_tag 
+                        ? `<img class="picker-item-poster" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
+                        : `<div class="picker-item-fallback">${item.type === 'Movie' ? '🎬' : '📺'}</div>`}
+                    <div>
+                        <div class="picker-item-title">${escapeHtml(item.name)}</div>
+                        <div class="picker-item-meta">${item.type} ${item.year ? `(${item.year})` : ''} ${runtimeText ? `• ${runtimeText}` : ''}</div>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-primary add-to-active-pl-btn">➕ Add</button>
+            </div>
+        `;}).join('');
+
+        elements.playlistPickerContainer.querySelectorAll('.picker-item-row').forEach(row => {
+            row.querySelector('.add-to-active-pl-btn').addEventListener('click', async (e) => {
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                btn.textContent = 'Adding...';
+
+                const itemData = {
+                    jellyfin_item_id: row.dataset.id,
+                    name: row.dataset.name,
+                    item_type: row.dataset.type,
+                    image_tag: row.dataset.tag || null,
+                    runtime_minutes: parseInt(row.dataset.runtime) || null,
+                };
+
+                try {
+                    const updatedPl = await api.addItemToPlaylist(state.currentPlaylist.id, itemData);
+                    state.currentPlaylist = updatedPl;
+                    btn.textContent = '✓ Added';
+                    btn.classList.replace('btn-primary', 'btn-secondary');
+                    showToast(`Added "${itemData.name}" to playlist!`, 'success');
+                    // Refresh background detail view
+                    renderPlaylistItemsList(updatedPl.items);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = '➕ Add';
+                }
+            });
+        });
+
+    } catch (err) {
+        elements.playlistPickerContainer.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+    }
+}
+
+// --- Add To Playlist Modal (from library cards) ---
 async function openAddToPlaylistModal(mediaData) {
     state.targetForPlaylist = mediaData;
     const runtimeFormatted = formatRuntime(mediaData.runtime);
@@ -1049,7 +1212,11 @@ function openScheduleModal(targetData) {
     const defaultTime = new Date();
     defaultTime.setMinutes(defaultTime.getMinutes() + 15);
     elements.scheduleDatetime.value = toLocalDatetimeString(defaultTime);
-    elements.scheduleTimeOfDay.value = '20:00';
+    
+    // Set default time of day to current local time + 15m (HH:MM)
+    const defH = String(defaultTime.getHours()).padStart(2, '0');
+    const defM = String(defaultTime.getMinutes()).padStart(2, '0');
+    elements.scheduleTimeOfDay.value = `${defH}:${defM}`;
     elements.scheduleAutoTurnOff.checked = true;
 
     elements.scheduleModal.classList.remove('hidden');
@@ -1271,6 +1438,7 @@ function renderTimeline(jobs) {
 function openSettingsModal(tabName = 'tv-tab') {
     elements.settingsModal.classList.remove('hidden');
     switchSettingsTab(tabName);
+    updateClockPreviews();
 }
 
 function switchSettingsTab(tabName) {
@@ -1399,6 +1567,24 @@ async function handleSaveJfSettings() {
     }
 }
 
+async function handleSaveTimezone() {
+    const tz = elements.timezoneSelect.value;
+    try {
+        await api.saveSettings({ app_timezone: tz });
+        state.settings.app_timezone = tz;
+        showToast(`Timezone saved: ${tz}`, 'success');
+        updateClockPreviews();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function handleAutoDetectTimezone() {
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
+    elements.timezoneSelect.value = browserTz;
+    handleSaveTimezone();
+}
+
 // --- Navigation & View Switching ---
 function switchView(viewName) {
     state.activeView = viewName;
@@ -1492,9 +1678,11 @@ function setupEventListeners() {
         loadPlaylists();
     });
 
+    elements.openAddItemsToPlaylistBtn.addEventListener('click', openBrowseAddItemsModal);
+
     elements.editPlaylistInfoBtn.addEventListener('click', () => {
         if (!state.currentPlaylist) return;
-        elements.playlistFormModalTitle.textContent = 'Edit Playlist';
+        elements.playlistFormModalTitle.textContent = `Edit Playlist "${state.currentPlaylist.name}"`;
         elements.playlistNameInput.value = state.currentPlaylist.name || '';
         elements.playlistDescInput.value = state.currentPlaylist.description || '';
         elements.playlistFormModal.classList.remove('hidden');
@@ -1538,6 +1726,16 @@ function setupEventListeners() {
             total_runtime_minutes: state.currentPlaylist.total_runtime_minutes,
             target_type: 'playlist',
         });
+    });
+
+    // Browse Add Items Modal (Search items to add to playlist)
+    elements.closeBrowseAddItemsModal.addEventListener('click', () => elements.browseAddItemsModal.classList.add('hidden'));
+    elements.closeBrowseAddItemsBtn.addEventListener('click', () => elements.browseAddItemsModal.classList.add('hidden'));
+    elements.playlistSearchInput.addEventListener('input', (e) => {
+        clearTimeout(state.playlistSearchDebounceTimer);
+        state.playlistSearchDebounceTimer = setTimeout(() => {
+            loadPlaylistPickerResults(e.target.value.trim());
+        }, 150);
     });
 
     // Create / Edit Playlist Modal handlers
@@ -1603,6 +1801,10 @@ function setupEventListeners() {
     // Jellyfin Setup Buttons
     elements.testJfBtn.addEventListener('click', handleTestJellyfin);
     elements.saveJfSettingsBtn.addEventListener('click', handleSaveJfSettings);
+
+    // Timezone Setup Buttons
+    elements.saveTimezoneBtn.addEventListener('click', handleSaveTimezone);
+    elements.autoDetectTzBtn.addEventListener('click', handleAutoDetectTimezone);
 }
 
 // Start application on DOM ready

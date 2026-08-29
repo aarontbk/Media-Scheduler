@@ -144,7 +144,8 @@
                         <span>←</span> Back to Playlists
                     </button>
                     <div class="playlist-detail-actions">
-                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">✏️ Edit</button>
+                        <button class="btn btn-primary btn-sm" id="openAddItemsToPlaylistBtn">➕ Add Shows / Movies</button>
+                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">✏️ Edit Details</button>
                         <button class="btn btn-danger btn-sm" id="deletePlaylistBtn">🗑️ Delete</button>
                     </div>
                 </div>
@@ -156,6 +157,11 @@
                 <div class="playlist-action-bar">
                     <button class="btn btn-secondary" id="playPlaylistNowBtn">⚡ Play on TV Now</button>
                     <button class="btn btn-primary" id="schedulePlaylistBtn">📅 Schedule Playlist</button>
+                </div>
+
+                <div class="section-title-row" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+                    <h3>Playlist Episodes & Movies</h3>
+                    <span class="text-dim" style="font-size: 0.8rem;">Use ▲/▼ to change play order</span>
                 </div>
 
                 <div class="playlist-items-list" id="playlistItemsList">
@@ -347,11 +353,35 @@
         </div>
     </div>
 
+    <!-- Browse & Add to Playlist Modal -->
+    <div class="modal-overlay hidden" id="browseAddItemsModal">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3 id="browseAddItemsModalTitle">➕ Add Media to Playlist</h3>
+                <button class="modal-close-btn" id="closeBrowseAddItemsModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="browser-controls" style="margin-bottom: 1rem;">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="playlistSearchInput" placeholder="Search movies, TV shows, anime to add..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="playlist-picker-container" id="playlistPickerContainer" style="max-height: 50vh; overflow-y: auto;">
+                    <!-- Media search results with "+ Add" buttons -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="closeBrowseAddItemsBtn">Done</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings & TV Setup Modal -->
     <div class="modal-overlay hidden" id="settingsModal">
         <div class="modal-card modal-lg">
             <div class="modal-header">
-                <h3>⚙️ TV & Server Settings</h3>
+                <h3>⚙️ TV, Server & Timezone Settings</h3>
                 <button class="modal-close-btn" id="closeSettingsModal">✕</button>
             </div>
 
@@ -359,6 +389,7 @@
             <div class="settings-tabs">
                 <button class="settings-tab active" data-tab="tv-tab">📺 Android TV (ADB)</button>
                 <button class="settings-tab" data-tab="jellyfin-tab">🍇 Jellyfin Server</button>
+                <button class="settings-tab" data-tab="system-tab">🌐 Timezone & Clock</button>
             </div>
 
             <div class="modal-body">
@@ -466,6 +497,47 @@
 
                     <div class="action-buttons-row" style="margin-top: 1.5rem;">
                         <button class="btn btn-primary" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
+                    </div>
+                </div>
+
+                <!-- TAB 3: Timezone & System Clock -->
+                <div class="settings-panel" id="system-tab">
+                    <div class="info-card" style="margin-bottom: 1.25rem;">
+                        <span class="info-icon">🕒</span>
+                        <div>
+                            <strong>Local Clock Synchronization</strong>
+                            <p>Ensures that scheduled times (e.g. 20:00) trigger at your exact local time.</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="timezoneSelect">Scheduler Timezone</label>
+                        <select class="form-input" id="timezoneSelect">
+                            <option value="Asia/Jerusalem">Asia/Jerusalem (Israel Standard / Daylight Time, UTC+2/+3)</option>
+                            <option value="Europe/Athens">Europe/Athens (Greece, UTC+2/+3)</option>
+                            <option value="Europe/Paris">Europe/Paris (CET/CEST, UTC+1/+2)</option>
+                            <option value="Europe/London">Europe/London (GMT/BST, UTC+0/+1)</option>
+                            <option value="America/New_York">America/New_York (Eastern Time, UTC-5/-4)</option>
+                            <option value="America/Los_Angeles">America/Los_Angeles (Pacific Time, UTC-8/-7)</option>
+                            <option value="UTC">UTC (Coordinated Universal Time)</option>
+                        </select>
+                        <span class="form-hint" id="browserTzHint">Browser detected: Checking...</span>
+                    </div>
+
+                    <div class="form-grid" style="margin-top: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Your Browser Time</label>
+                            <input type="text" class="form-input" id="browserClockPreview" readonly style="opacity: 0.8;">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Scheduler Target Time</label>
+                            <input type="text" class="form-input" id="serverClockPreview" readonly style="opacity: 0.8;">
+                        </div>
+                    </div>
+
+                    <div class="action-buttons-row" style="margin-top: 1.5rem;">
+                        <button class="btn btn-primary" id="saveTimezoneBtn">Save Timezone</button>
+                        <button class="btn btn-secondary" id="autoDetectTzBtn">⚡ Sync with Browser Timezone</button>
                     </div>
                 </div>
 

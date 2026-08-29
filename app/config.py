@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     tv_ip: str = ""
     adb_port: int = 5555
     
+    # Timezone
+    app_timezone: str = "Asia/Jerusalem"
+    
     # Database
     database_url: str = "sqlite+aiosqlite:////data/scheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/scheduler.db"
     
@@ -68,6 +71,7 @@ async def get_active_settings(db: AsyncSession | None = None) -> dict:
         "tv_device_name": env.tv_device_name,
         "tv_ip": env.tv_ip,
         "adb_port": env.adb_port,
+        "app_timezone": env.app_timezone,
     }
     
     # Layer 1: Persistent JSON config

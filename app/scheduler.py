@@ -202,6 +202,22 @@ async def execute_playback(
             await session.commit()
 
 
+from zoneinfo import ZoneInfo
+
+async def get_configured_tz() -> ZoneInfo:
+    """Get the active application timezone for scheduling."""
+    try:
+        async with AsyncSessionLocal() as session:
+            cfg = await get_active_settings(session)
+            tz_name = cfg.get("app_timezone", "Asia/Jerusalem")
+            return ZoneInfo(tz_name)
+    except Exception as e:
+        logger.warning(f"Could not load timezone from settings: {e}. Falling back to Asia/Jerusalem.")
+        try:
+            return ZoneInfo("Asia/Jerusalem")
+        except Exception:
+            return ZoneInfo("UTC")
+
 async def schedule_playback(
     job_db_id: str,
     target_type: str = "media",
@@ -214,7 +230,7 @@ async def schedule_playback(
 ) -> str | None:
     """
     Schedule a playback job in APScheduler.
-    Supports once, daily, weekly, and custom_days triggers.
+    Supports once, daily, weekly, and custom_days triggers with correct timezone awareness.
     """
     global scheduler
     if scheduler is None:
@@ -222,20 +238,28 @@ async def schedule_playback(
         return None
         
     try:
+        app_tz = await get_configured_tz()
         trigger = None
+        
         if schedule_type == "once":
-            trigger = DateTrigger(run_time=scheduled_time or datetime.utcnow())
+            run_dt = scheduled_time
+            if run_dt is not None:
+                if run_dt.tzinfo is None:
+                    run_dt = run_dt.replace(tzinfo=app_tz)
+            else:
+                run_dt = datetime.now(app_tz)
+            trigger = DateTrigger(run_time=run_dt)
         elif schedule_type == "daily":
             parts = (time_of_day or "20:00").split(":")
             h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-            trigger = CronTrigger(hour=h, minute=m)
+            trigger = CronTrigger(hour=h, minute=m, timezone=app_tz)
         elif schedule_type in ("weekly", "custom_days"):
             parts = (time_of_day or "20:00").split(":")
             h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
             dow = (days_of_week or "fri").lower()
-            trigger = CronTrigger(day_of_week=dow, hour=h, minute=m)
+            trigger = CronTrigger(day_of_week=dow, hour=h, minute=m, timezone=app_tz)
         else:
-            trigger = DateTrigger(run_time=scheduled_time or datetime.utcnow())
+            trigger = DateTrigger(run_time=scheduled_time or datetime.now(app_tz))
             
         job_id = await scheduler.add_schedule(
             execute_playback,
@@ -248,7 +272,7 @@ async def schedule_playback(
                 "auto_turn_off": auto_turn_off,
             },
         )
-        logger.info(f"Registered APScheduler job: {job_id} (type={schedule_type})")
+        logger.info(f"Registered APScheduler job: {job_id} (type={schedule_type}, tz={app_tz})")
         return str(job_id)
         
     except Exception as e:

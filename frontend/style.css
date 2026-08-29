@@ -1260,6 +1260,79 @@ body {
     color: var(--text-main);
 }
 
+.playlist-card-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+}
+
+/* Playlist Picker inside Modal */
+.playlist-picker-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.picker-item-row {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    transition: all 0.15s;
+}
+
+.picker-item-row:hover {
+    border-color: var(--primary);
+    background: var(--bg-card);
+}
+
+.picker-item-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.picker-item-poster {
+    width: 36px;
+    height: 54px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--bg-card);
+    flex-shrink: 0;
+}
+
+.picker-item-fallback {
+    width: 36px;
+    height: 54px;
+    border-radius: 4px;
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.picker-item-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.picker-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 /* Playlist Detail View */
 .playlist-detail-view {
     display: flex;

@@ -8,6 +8,10 @@ services:
     network_mode: host
     env_file:
       - .env
+    environment:
+      - TZ=Asia/Jerusalem
     volumes:
       - ./data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     working_dir: /app
