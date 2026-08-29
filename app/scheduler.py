@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from apscheduler import AsyncScheduler
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
@@ -27,6 +28,21 @@ def create_scheduler() -> AsyncScheduler:
     engine = create_async_engine(db_url, echo=False)
     data_store = SQLAlchemyDataStore(engine)
     return AsyncScheduler(data_store=data_store)
+
+
+async def get_configured_tz() -> ZoneInfo:
+    """Get the active application timezone for scheduling."""
+    try:
+        async with AsyncSessionLocal() as session:
+            cfg = await get_active_settings(session)
+            tz_name = cfg.get("app_timezone", "Asia/Jerusalem")
+            return ZoneInfo(tz_name)
+    except Exception as e:
+        logger.warning(f"Could not load timezone from settings: {e}. Falling back to Asia/Jerusalem.")
+        try:
+            return ZoneInfo("Asia/Jerusalem")
+        except Exception:
+            return ZoneInfo("UTC")
 
 
 async def monitor_playback_and_turn_off(
@@ -81,14 +97,14 @@ async def monitor_playback_and_turn_off(
     turn_off_success = await adb.turn_off_tv()
     logger.info(f"TV turn-off sequence completed (success={turn_off_success})")
     
-    # Mark job completed
+    # Mark job completed or reset to pending if recurring
     async with AsyncSessionLocal() as session:
-        await session.execute(
-            update(ScheduledJob)
-            .where(ScheduledJob.id == job_db_id)
-            .values(status="completed")
-        )
-        await session.commit()
+        job_res = await session.execute(select(ScheduledJob).where(ScheduledJob.id == job_db_id))
+        job = job_res.scalar_one_or_none()
+        if job:
+            next_status = "pending" if job.schedule_type != "once" else "completed"
+            job.status = next_status
+            await session.commit()
 
 
 async def execute_playback(
@@ -181,14 +197,14 @@ async def execute_playback(
                 )
             )
         else:
-            # Mark completed immediately if not monitoring
+            # Mark completed immediately if not monitoring (or reset to pending if recurring)
             async with AsyncSessionLocal() as session:
-                await session.execute(
-                    update(ScheduledJob)
-                    .where(ScheduledJob.id == job_db_id)
-                    .values(status="completed")
-                )
-                await session.commit()
+                job_res = await session.execute(select(ScheduledJob).where(ScheduledJob.id == job_db_id))
+                job = job_res.scalar_one_or_none()
+                if job:
+                    next_status = "pending" if job.schedule_type != "once" else "completed"
+                    job.status = next_status
+                    await session.commit()
                 
     except Exception as e:
         error_msg = str(e)
@@ -201,22 +217,6 @@ async def execute_playback(
             )
             await session.commit()
 
-
-from zoneinfo import ZoneInfo
-
-async def get_configured_tz() -> ZoneInfo:
-    """Get the active application timezone for scheduling."""
-    try:
-        async with AsyncSessionLocal() as session:
-            cfg = await get_active_settings(session)
-            tz_name = cfg.get("app_timezone", "Asia/Jerusalem")
-            return ZoneInfo(tz_name)
-    except Exception as e:
-        logger.warning(f"Could not load timezone from settings: {e}. Falling back to Asia/Jerusalem.")
-        try:
-            return ZoneInfo("Asia/Jerusalem")
-        except Exception:
-            return ZoneInfo("UTC")
 
 async def schedule_playback(
     job_db_id: str,
@@ -231,6 +231,7 @@ async def schedule_playback(
     """
     Schedule a playback job in APScheduler.
     Supports once, daily, weekly, and custom_days triggers with correct timezone awareness.
+    Jobs fire precisely at the requested wall-clock second without any pre-offset.
     """
     global scheduler
     if scheduler is None:
@@ -246,18 +247,20 @@ async def schedule_playback(
             if run_dt is not None:
                 if run_dt.tzinfo is None:
                     run_dt = run_dt.replace(tzinfo=app_tz)
+                else:
+                    run_dt = run_dt.astimezone(app_tz)
             else:
                 run_dt = datetime.now(app_tz)
             trigger = DateTrigger(run_time=run_dt)
         elif schedule_type == "daily":
             parts = (time_of_day or "20:00").split(":")
             h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-            trigger = CronTrigger(hour=h, minute=m, timezone=app_tz)
+            trigger = CronTrigger(hour=h, minute=m, second=0, timezone=app_tz)
         elif schedule_type in ("weekly", "custom_days"):
             parts = (time_of_day or "20:00").split(":")
             h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
             dow = (days_of_week or "fri").lower()
-            trigger = CronTrigger(day_of_week=dow, hour=h, minute=m, timezone=app_tz)
+            trigger = CronTrigger(day_of_week=dow, hour=h, minute=m, second=0, timezone=app_tz)
         else:
             trigger = DateTrigger(run_time=scheduled_time or datetime.now(app_tz))
             
@@ -295,17 +298,22 @@ async def cancel_job(apscheduler_job_id: str) -> bool:
 
 
 async def start_scheduler() -> None:
-    """Start the background scheduler."""
+    """Start the background scheduler engine and its background execution worker."""
     global scheduler
     scheduler = create_scheduler()
     await scheduler.__aenter__()
-    logger.info("APScheduler started")
+    await scheduler.start_in_background()
+    logger.info("APScheduler started and running in background worker")
 
 
 async def stop_scheduler() -> None:
     """Stop the background scheduler."""
     global scheduler
     if scheduler:
+        try:
+            await scheduler.stop()
+        except Exception:
+            pass
         await scheduler.__aexit__(None, None, None)
         scheduler = None
         logger.info("APScheduler stopped")
