@@ -380,22 +380,44 @@ class JellyfinClient:
             sessions = await self.get_sessions()
             tv_name = (self.tv_device_name or "").lower().strip()
             
+            # Filter to controllable non-script sessions
+            valid_sessions = [
+                s for s in sessions 
+                if s.get("supports_remote_control", False) and 
+                s.get("client", "").lower() not in ("media scheduler", "api", "script", "swagger")
+            ]
+            
             # Match 1: By configured Device Name if set
             if tv_name:
-                for session in sessions:
-                    if tv_name in session["device_name"].lower() and session["supports_remote_control"]:
+                for session in valid_sessions:
+                    d_name = session.get("device_name", "").lower()
+                    if tv_name in d_name or d_name in tv_name:
                         return session
                         
-            # Match 2: Any Android TV client with remote control support
-            for session in sessions:
-                if "android tv" in session["client"].lower() and session["supports_remote_control"]:
+            # Match 2: Any Android TV client
+            for session in valid_sessions:
+                client_name = session.get("client", "").lower()
+                device_name = session.get("device_name", "").lower()
+                if "android tv" in client_name or "androidtv" in client_name or "android tv" in device_name:
                     return session
                     
-            # Match 3: Any active controllable session
-            for session in sessions:
-                if session["supports_remote_control"] and session["is_active"]:
+            # Match 3: Any TV device brand / keyword match
+            tv_keywords = ("tcl", "tv", "android", "fire", "chromecast", "shield", "bravia", "samsung", "lg")
+            for session in valid_sessions:
+                d_name = session.get("device_name", "").lower()
+                c_name = session.get("client", "").lower()
+                if any(kw in d_name or kw in c_name for kw in tv_keywords):
                     return session
                     
+            # Match 4: Any active controllable session
+            for session in valid_sessions:
+                if session.get("is_active", False):
+                    return session
+                    
+            # Match 5: Any controllable session
+            if valid_sessions:
+                return valid_sessions[0]
+                
             return None
         except Exception as e:
             logger.error(f"Unexpected error in find_tv_session: {e}")

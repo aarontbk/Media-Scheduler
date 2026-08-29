@@ -121,7 +121,6 @@ const elements = {
     scheduleWeeklyDay: document.getElementById('scheduleWeeklyDay'),
     customDaysGroup: document.getElementById('customDaysGroup'),
     scheduleTimeOfDay: document.getElementById('scheduleTimeOfDay'),
-    scheduleAutoTurnOff: document.getElementById('scheduleAutoTurnOff'),
     instantPlayBtn: document.getElementById('instantPlayBtn'),
     confirmScheduleBtn: document.getElementById('confirmScheduleBtn'),
 
@@ -1217,7 +1216,6 @@ function openScheduleModal(targetData) {
     const defH = String(defaultTime.getHours()).padStart(2, '0');
     const defM = String(defaultTime.getMinutes()).padStart(2, '0');
     elements.scheduleTimeOfDay.value = `${defH}:${defM}`;
-    elements.scheduleAutoTurnOff.checked = true;
 
     elements.scheduleModal.classList.remove('hidden');
 }
@@ -1277,7 +1275,6 @@ function openEditScheduleModal(job) {
         }
     }
 
-    elements.scheduleAutoTurnOff.checked = job.auto_turn_off !== false;
     elements.scheduleModal.classList.remove('hidden');
 }
 
@@ -1325,7 +1322,6 @@ async function handleConfirmSchedule() {
     const activeFreqBtn = elements.recurrenceToggleGroup.querySelector('.toggle-btn.active');
     const scheduleType = activeFreqBtn ? activeFreqBtn.dataset.freq : 'once';
     const isPlaylist = state.selectedMedia.target_type === 'playlist';
-    const autoTurnOff = elements.scheduleAutoTurnOff.checked;
 
     let scheduledTime = null;
     let daysOfWeek = null;
@@ -1365,7 +1361,7 @@ async function handleConfirmSchedule() {
         schedule_type: scheduleType,
         days_of_week: daysOfWeek,
         time_of_day: timeOfDay,
-        auto_turn_off: autoTurnOff,
+        auto_turn_off: true,
     };
 
     try {
@@ -1389,7 +1385,6 @@ async function handleConfirmSchedule() {
 async function handleInstantPlay() {
     if (!state.selectedMedia) return;
     const isPlaylist = state.selectedMedia.target_type === 'playlist';
-    const autoTurnOff = elements.scheduleAutoTurnOff.checked;
 
     elements.instantPlayBtn.disabled = true;
     elements.instantPlayBtn.textContent = 'Starting...';
@@ -1398,7 +1393,7 @@ async function handleInstantPlay() {
         if (isPlaylist) {
             await api.playPlaylistNow(state.selectedMedia.id);
         } else {
-            await api.playNow([state.selectedMedia.id], autoTurnOff);
+            await api.playNow([state.selectedMedia.id], true);
         }
         showToast('Playback started on TV', 'success');
         elements.scheduleModal.classList.add('hidden');
@@ -1476,7 +1471,6 @@ function renderTimeline(jobs) {
                         <span class="text-indigo-400 font-medium">${scheduleLabel}</span>
                         <span>·</span>
                         <span>${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
-                        ${job.auto_turn_off ? `<span>· Auto-sleep</span>` : ''}
                     </div>
                     ${job.error_message ? `<div class="text-rose-400 text-[11px]">${escapeHtml(job.error_message)}</div>` : ''}
                 </div>
@@ -1514,15 +1508,28 @@ function renderTimeline(jobs) {
 }
 
 // --- Settings Modals & Handlers ---
-function openSettingsModal(tabName = 'tv-tab') {
+async function openSettingsModal(tabName = 'tv-tab') {
     elements.settingsModal.classList.remove('hidden');
     switchSettingsTab(tabName);
+    await loadInitialSettings();
     updateClockPreviews();
 }
 
 function switchSettingsTab(tabName) {
-    elements.settingsTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
-    elements.settingsPanels.forEach(panel => panel.classList.toggle('active', panel.id === tabName));
+    elements.settingsTabs.forEach(tab => {
+        const isActive = tab.dataset.tab === tabName;
+        tab.classList.toggle('active', isActive);
+        if (isActive) {
+            tab.className = 'settings-tab active flex-1 py-2.5 text-xs font-medium text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5 transition';
+        } else {
+            tab.className = 'settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition';
+        }
+    });
+    elements.settingsPanels.forEach(panel => {
+        const isActive = panel.id === tabName;
+        panel.classList.toggle('active', isActive);
+        panel.classList.toggle('hidden', !isActive);
+    });
 }
 
 async function handleConnectTv() {
@@ -1900,6 +1907,10 @@ function setupEventListeners() {
     // Timezone Setup Buttons
     elements.saveTimezoneBtn.addEventListener('click', handleSaveTimezone);
     elements.autoDetectTzBtn.addEventListener('click', handleAutoDetectTimezone);
+    elements.timezoneSelect.addEventListener('change', updateClockPreviews);
+
+    // Keep live clocks accurate
+    setInterval(updateClockPreviews, 1000);
 }
 
 // Start application on DOM ready

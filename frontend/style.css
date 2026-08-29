@@ -59,7 +59,7 @@
   display: none;
 }
 .settings-panel.active {
-  display: block;
+  display: block !important;
 }
 
 /* Media Cards */

@@ -167,11 +167,15 @@ async def execute_playback(
             logger.info("TV session not found. Attempting automated ADB wake-up...")
             await adb.wake_and_prepare()
             
-            # Wait for Jellyfin Android TV client to connect to server
-            logger.info("Waiting 25 seconds for TV Jellyfin app to register...")
-            await asyncio.sleep(25)
+            # Poll for Jellyfin Android TV client to connect to server (up to 30 seconds)
+            logger.info("Waiting up to 30 seconds for TV Jellyfin app to register...")
+            for attempt in range(10):
+                await asyncio.sleep(3)
+                tv_session = await jellyfin.find_tv_session()
+                if tv_session:
+                    logger.info(f"TV session found on attempt {attempt+1}: {tv_session['id']} ({tv_session['device_name']})")
+                    break
             
-            tv_session = await jellyfin.find_tv_session()
             if not tv_session:
                 raise RuntimeError("Could not establish TV session after wake-up attempt")
         
