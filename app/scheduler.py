@@ -21,8 +21,10 @@ scheduler: AsyncScheduler | None = None
 def create_scheduler() -> AsyncScheduler:
     """Create the APScheduler instance with persistent storage."""
     import os
+    from sqlalchemy.ext.asyncio import create_async_engine
     db_url = "sqlite+aiosqlite:////data/apscheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/apscheduler.db"
-    data_store = SQLAlchemyDataStore(engine_or_url=db_url)
+    engine = create_async_engine(db_url, echo=False)
+    data_store = SQLAlchemyDataStore(engine)
     return AsyncScheduler(data_store=data_store)
 
 
