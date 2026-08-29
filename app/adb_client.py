@@ -1,16 +1,44 @@
 import asyncio
 import logging
 import os
-from app.config import get_settings
+import sys
+import shutil
+from app.config import get_settings, get_data_dir
 from app.tv_controller import BaseTVController
 
 logger = logging.getLogger(__name__)
 
-# Ensure ADB stores keys in persistent /data directory if available
-if os.path.exists("/data"):
-    android_dir = "/data/.android"
+def _get_adb_binary() -> str:
+    """Find the ADB executable path (bundled in PyInstaller, local bin/, or system PATH)."""
+    # 1. PyInstaller temporary extraction directory
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        for sub in ["bin", ""]:
+            cand = os.path.join(sys._MEIPASS, sub, "adb.exe" if sys.platform == "win32" else "adb")
+            if os.path.exists(cand):
+                return cand
+
+    # 2. Local project bin/ directory
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_bin = os.path.join(base_dir, "bin", "adb.exe" if sys.platform == "win32" else "adb")
+    if os.path.exists(local_bin):
+        return local_bin
+
+    # 3. System PATH
+    found = shutil.which("adb")
+    if found:
+        return found
+
+    return "adb"
+
+def _get_adb_env() -> dict:
+    """Prepare ADB environment variables and persistent key storage."""
+    adb_env = os.environ.copy()
+    data_dir = get_data_dir()
+    android_dir = os.path.join(data_dir, ".android")
     os.makedirs(android_dir, exist_ok=True)
-    os.environ["ADB_VENDOR_KEYS"] = android_dir
+    adb_env["HOME"] = data_dir
+    adb_env["ADB_VENDOR_KEYS"] = os.path.join(android_dir, "adbkey")
+    return adb_env
 
 class ADBClient(BaseTVController):
     """ADB-over-network client for controlling Android TV with guided connection flow."""
@@ -23,20 +51,23 @@ class ADBClient(BaseTVController):
     
     async def _run_adb(self, *args: str, timeout: float = 10) -> tuple[int, str, str]:
         """Run an ADB command and return (returncode, stdout, stderr)."""
-        cmd = ["adb", *args]
+        adb_bin = _get_adb_binary()
+        cmd = [adb_bin, *args]
         logger.debug(f"Running ADB: {' '.join(cmd)}")
-        adb_env = os.environ.copy()
-        if os.path.exists("/data"):
-            adb_env["HOME"] = "/data"
-            adb_env["ADB_VENDOR_KEYS"] = "/data/.android/adbkey"
-            os.makedirs("/data/.android", exist_ok=True)
+        adb_env = _get_adb_env()
             
         try:
+            # On Windows hide console window for subprocess
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = getattr(asyncio.subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=adb_env,
+                creationflags=creationflags,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             return proc.returncode, stdout.decode("utf-8", errors="ignore").strip(), stderr.decode("utf-8", errors="ignore").strip()
@@ -48,7 +79,7 @@ class ADBClient(BaseTVController):
                 pass
             return -1, "", "timeout"
         except FileNotFoundError:
-            logger.error("ADB binary not found. Ensure 'android-tools-adb' is installed.")
+            logger.error("ADB binary not found. Ensure 'android-tools-adb' is installed or bundled in bin/.")
             return -1, "", "adb binary not found"
         except Exception as e:
             logger.error(f"Unexpected error running ADB {' '.join(cmd)}: {e}")
@@ -92,8 +123,8 @@ class ADBClient(BaseTVController):
                 
         # If not connected yet or not in list, try to connect
         if not found_state:
-            rc_conn, conn_out, conn_err = await self._run_adb("connect", address, timeout=8)
-            rc, devices_out, _ = await self._run_adb("devices", "-l")
+            rc_conn, conn_out, conn_err = await self._run_adb("connect", address, timeout=3)
+            rc, devices_out, _ = await self._run_adb("devices", "-l", timeout=3)
             for line in devices_out.splitlines():
                 parts = line.strip().split()
                 if len(parts) >= 2 and parts[0] == address:

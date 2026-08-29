@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import update, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import get_settings, get_active_settings
+from app.config import get_settings, get_active_settings, get_data_dir
 from app.database import AsyncSessionLocal
 from app.models import ScheduledJob, Playlist, PlaylistItem
 from app.media_provider import BaseMediaProvider
@@ -25,7 +25,12 @@ scheduler: AsyncScheduler | None = None
 def create_scheduler() -> AsyncScheduler:
     """Create the APScheduler instance with persistent storage."""
     import os
-    db_url = "sqlite+aiosqlite:////data/apscheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/apscheduler.db"
+    data_dir = get_data_dir()
+    db_path = os.path.join(data_dir, "apscheduler.db").replace("\\", "/")
+    if os.path.exists("/data"):
+        db_url = f"sqlite+aiosqlite:////{db_path.lstrip('/')}"
+    else:
+        db_url = f"sqlite+aiosqlite:///{db_path}"
     engine = create_async_engine(db_url, echo=False)
     data_store = SQLAlchemyDataStore(engine)
     return AsyncScheduler(data_store=data_store)

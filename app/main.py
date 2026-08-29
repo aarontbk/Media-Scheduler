@@ -1,3 +1,5 @@
+import sys
+import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -48,20 +50,34 @@ async def lifespan(app: FastAPI):
     await sched_module.stop_scheduler()
 
 
+def get_frontend_dir() -> str:
+    """Resolve frontend static directory for both development and PyInstaller bundle."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        meipass_frontend = os.path.join(sys._MEIPASS, "frontend")
+        if os.path.exists(meipass_frontend):
+            return meipass_frontend
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_frontend = os.path.join(base_dir, "frontend")
+    if os.path.exists(local_frontend):
+        return local_frontend
+    return "frontend"
+
+FRONTEND_DIR = get_frontend_dir()
+
 app = FastAPI(title="Media Scheduler", version="1.2.0", lifespan=lifespan)
 
 # --- Static Files ---
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 @app.get("/")
 async def index():
-    return FileResponse("frontend/index.html")
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse("frontend/logo.png", media_type="image/png")
+    return FileResponse(os.path.join(FRONTEND_DIR, "logo.png"), media_type="image/png")
 
 
 # --- Helper: Get Configured Clients ---
@@ -78,27 +94,36 @@ async def get_settings_endpoint(db: AsyncSession = Depends(get_db)):
     """Fetch current app configuration and connectivity states."""
     cfg = await get_active_settings(db)
     
-    # Test Jellyfin connection (always test since it's the default media backend)
-    jf_test: dict = {}
-    jf_users: list[JellyfinUser] = []
-    if cfg.get("media_provider", "jellyfin") == "jellyfin" and cfg.get("jellyfin_url"):
-        jf_client = JellyfinClient(
-            base_url=cfg["jellyfin_url"],
-            api_key=cfg["jellyfin_api_key"],
-            user_id=cfg["jellyfin_user_id"],
-            tv_device_name=cfg["tv_device_name"],
-        )
-        jf_test = await jf_client.test_connection()
-        jf_users = [JellyfinUser(**u) for u in jf_test.get("users", [])] if jf_test.get("connected") else []
+    # Test Jellyfin connection
+    async def _test_jf():
+        if cfg.get("media_provider", "jellyfin") == "jellyfin" and cfg.get("jellyfin_url") and cfg.get("jellyfin_api_key"):
+            try:
+                jf_client = JellyfinClient(
+                    base_url=cfg["jellyfin_url"],
+                    api_key=cfg["jellyfin_api_key"],
+                    user_id=cfg["jellyfin_user_id"],
+                    tv_device_name=cfg["tv_device_name"],
+                )
+                return await asyncio.wait_for(jf_client.test_connection(), timeout=2.5)
+            except Exception as e:
+                return {"connected": False, "error": str(e)}
+        return {}
 
-    # ADB status (only relevant when tv_type is android)
-    adb_state, adb_is_ready, adb_message = "not_configured", False, ""
-    if cfg.get("tv_type", "android") == "android" and cfg.get("tv_ip"):
-        adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
-        adb_status = await adb.get_detailed_status()
-        adb_state = adb_status["state"]
-        adb_is_ready = adb_status["is_ready"]
-        adb_message = adb_status["message"]
+    # ADB status
+    async def _test_adb():
+        if cfg.get("tv_type", "android") == "android" and cfg.get("tv_ip"):
+            try:
+                adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
+                return await asyncio.wait_for(adb.get_detailed_status(), timeout=2.5)
+            except Exception as e:
+                return {"state": "offline", "is_ready": False, "message": str(e)}
+        return {"state": "not_configured", "is_ready": False, "message": ""}
+
+    jf_test, adb_status = await asyncio.gather(_test_jf(), _test_adb())
+    jf_users = [JellyfinUser(**u) for u in jf_test.get("users", [])] if jf_test.get("connected") else []
+    adb_state = adb_status.get("state", "not_configured")
+    adb_is_ready = adb_status.get("is_ready", False)
+    adb_message = adb_status.get("message", "")
 
     return SettingsResponse(
         # Jellyfin
@@ -271,13 +296,21 @@ async def tv_status(db: AsyncSession = Depends(get_db)):
     """Get live TV status from the active media provider and TV controller."""
     media, tv, cfg = await get_clients(db)
 
-    tv_session = None
-    try:
-        tv_session = await media.find_tv_session()
-    except Exception as e:
-        logger.warning(f"Could not check media player sessions: {e}")
+    async def _get_sess():
+        try:
+            return await media.find_tv_session()
+        except Exception as e:
+            logger.warning(f"Could not check media player sessions: {e}")
+            return None
 
-    tv_ctrl_status = await tv.get_detailed_status()
+    async def _get_tv():
+        try:
+            return await tv.get_detailed_status()
+        except Exception as e:
+            logger.warning(f"Could not check TV status: {e}")
+            return {}
+
+    tv_session, tv_ctrl_status = await asyncio.gather(_get_sess(), _get_tv())
 
     return TVStatus(
         session_found=tv_session is not None,

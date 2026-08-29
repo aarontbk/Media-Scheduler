@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import logging
 from pydantic_settings import BaseSettings
@@ -8,7 +9,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-CONFIG_JSON_PATH = "/data/config.json" if os.path.exists("/data") else "data/config.json"
+def get_data_dir() -> str:
+    """Get persistent data directory.
+    - If running in Docker / Linux with /data mounted: /data
+    - If running as Windows executable or desktop app: %APPDATA%/MediaScheduler/data or ./data
+    """
+    if os.path.exists("/data") and os.access("/data", os.W_OK):
+        return "/data"
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            path = os.path.join(appdata, "MediaScheduler", "data")
+            os.makedirs(path, exist_ok=True)
+            return path
+    os.makedirs("data", exist_ok=True)
+    return "data"
+
+def get_default_db_url() -> str:
+    db_path = os.path.join(get_data_dir(), "scheduler.db").replace("\\", "/")
+    if os.path.exists("/data"):
+        return f"sqlite+aiosqlite:////{db_path.lstrip('/')}"
+    return f"sqlite+aiosqlite:///{db_path}"
+
+CONFIG_JSON_PATH = os.path.join(get_data_dir(), "config.json")
 
 class Settings(BaseSettings):
     # Jellyfin
@@ -41,7 +64,7 @@ class Settings(BaseSettings):
     app_timezone: str = "Asia/Jerusalem"
     
     # Database
-    database_url: str = "sqlite+aiosqlite:////data/scheduler.db" if os.path.exists("/data") else "sqlite+aiosqlite:///data/scheduler.db"
+    database_url: str = get_default_db_url()
     
     # Server
     host: str = "0.0.0.0"

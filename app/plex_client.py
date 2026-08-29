@@ -48,7 +48,7 @@ class PlexClient(BaseMediaProvider):
         if not self.base_url or not self.token:
             return {"connected": False, "error": "Plex server URL or token is missing"}
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(f"{self.base_url}/", headers=self.headers)
                 if resp.status_code == 200:
                     data = resp.json()

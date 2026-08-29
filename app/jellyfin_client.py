@@ -39,7 +39,7 @@ class JellyfinClient(BaseMediaProvider):
             return {"connected": False, "error": "Jellyfin URL or API Key is missing"}
             
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(
                     f"{self.base_url}/System/Info",
                     headers=self.headers,
@@ -68,7 +68,7 @@ class JellyfinClient(BaseMediaProvider):
     async def list_users(self) -> list[dict]:
         """Fetch all users from the Jellyfin server."""
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(
                     f"{self.base_url}/Users",
                     headers=self.headers,
@@ -352,7 +352,7 @@ class JellyfinClient(BaseMediaProvider):
     async def get_sessions(self) -> list[dict]:
         """Get all active Jellyfin sessions."""
         try:
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(
                     f"{self.base_url}/Sessions",
                     headers=self.headers,
