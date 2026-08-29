@@ -1337,7 +1337,7 @@ async function handleConfirmSchedule() {
             showToast('Please select date and time', 'error');
             return;
         }
-        scheduledTime = new Date(dtVal).toISOString();
+        scheduledTime = dtVal.length === 16 ? `${dtVal}:00` : dtVal;
     } else {
         timeOfDay = elements.scheduleTimeOfDay.value || '20:00';
         if (scheduleType === 'weekly') {

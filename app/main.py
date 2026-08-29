@@ -2,6 +2,7 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.staticfiles import StaticFiles
@@ -479,17 +480,24 @@ async def play_playlist_now(playlist_id: str, db: AsyncSession = Depends(get_db)
 @app.post("/api/schedule", response_model=ScheduleResponse, status_code=201)
 async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_db)):
     """Create a new scheduled playback job (one-time or recurring)."""
+    cfg = await get_active_settings(db)
+    app_tz = ZoneInfo(cfg.get("app_timezone", "Asia/Jerusalem"))
+    
     # Calculate scheduled_time for DB record
     scheduled_dt = data.scheduled_time
     if not scheduled_dt:
         if data.schedule_type != "once" and data.time_of_day:
             parts = data.time_of_day.split(":")
-            now = datetime.utcnow()
+            now = datetime.now(app_tz)
             scheduled_dt = now.replace(
                 hour=int(parts[0]), minute=int(parts[1]) if len(parts) > 1 else 0, second=0, microsecond=0
-            )
+            ).replace(tzinfo=None)
         else:
-            scheduled_dt = datetime.utcnow() + timedelta(minutes=5)
+            now = datetime.now(app_tz) + timedelta(minutes=5)
+            scheduled_dt = now.replace(tzinfo=None)
+    else:
+        if scheduled_dt.tzinfo is not None:
+            scheduled_dt = scheduled_dt.astimezone(app_tz).replace(tzinfo=None)
             
     job = ScheduledJob(
         name=data.name,
@@ -567,14 +575,20 @@ async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = 
         job.auto_turn_off = data.auto_turn_off
 
     # Calculate scheduled time
+    cfg = await get_active_settings(db)
+    app_tz = ZoneInfo(cfg.get("app_timezone", "Asia/Jerusalem"))
+    
     if data.scheduled_time is not None:
-        job.scheduled_time = data.scheduled_time
+        sched_dt = data.scheduled_time
+        if sched_dt.tzinfo is not None:
+            sched_dt = sched_dt.astimezone(app_tz).replace(tzinfo=None)
+        job.scheduled_time = sched_dt
     elif job.schedule_type != "once" and job.time_of_day:
         parts = job.time_of_day.split(":")
-        now = datetime.utcnow()
+        now = datetime.now(app_tz)
         job.scheduled_time = now.replace(
             hour=int(parts[0]), minute=int(parts[1]) if len(parts) > 1 else 0, second=0, microsecond=0
-        )
+        ).replace(tzinfo=None)
 
     job.status = "pending"
     job.error_message = None

@@ -12,6 +12,8 @@ services:
       - TZ=Asia/Jerusalem
     volumes:
       - ./data:/data
+      - ./app:/app/app
+      - ./frontend:/app/frontend
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     working_dir: /app
