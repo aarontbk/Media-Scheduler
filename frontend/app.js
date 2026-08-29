@@ -171,12 +171,11 @@ const elements = {
     toastContainer: document.getElementById('toastContainer'),
 };
 
-// --- Helper & Utility Functions ---
+// --- Helper Functions ---
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    const icon = type === 'success' ? '✓' : (type === 'error' ? '✕' : 'ℹ');
-    toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
+    toast.textContent = message;
     elements.toastContainer.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
@@ -520,19 +519,19 @@ async function updateTvStatusUI() {
         state.tvStatus = status;
 
         if (status.session_found && status.is_active) {
-            elements.headerStatusDot.className = 'status-led connected';
+            elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led connected';
             elements.headerStatusLabel.textContent = status.device_name || 'TV Active';
         } else if (status.adb_reachable) {
-            elements.headerStatusDot.className = 'status-led connected';
-            elements.headerStatusLabel.textContent = 'TV Ready (ADB)';
+            elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led connected';
+            elements.headerStatusLabel.textContent = 'TV Ready';
         } else if (status.adb_state === 'unauthorized') {
-            elements.headerStatusDot.className = 'status-led partial';
+            elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led partial';
             elements.headerStatusLabel.textContent = 'Prompt on TV';
         } else if (!status.configured_tv_ip) {
-            elements.headerStatusDot.className = 'status-led';
+            elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led';
             elements.headerStatusLabel.textContent = 'Setup TV';
         } else {
-            elements.headerStatusDot.className = 'status-led offline';
+            elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led offline';
             elements.headerStatusLabel.textContent = 'TV Offline';
         }
 
@@ -549,14 +548,14 @@ async function updateTvStatusUI() {
 
         renderAdbStatusBox(status);
     } catch (err) {
-        elements.headerStatusDot.className = 'status-led offline';
+        elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led offline';
         elements.headerStatusLabel.textContent = 'Server Offline';
     }
 }
 
 function renderAdbStatusBox(status) {
     const st = status.adb_state || 'offline';
-    elements.adbBoxDot.className = `status-led ${status.adb_reachable ? 'connected' : (st === 'unauthorized' ? 'partial' : 'offline')}`;
+    elements.adbBoxDot.className = `w-2 h-2 rounded-full status-led ${status.adb_reachable ? 'connected' : (st === 'unauthorized' ? 'partial' : 'offline')}`;
     
     if (st === 'device') {
         elements.adbBoxTitle.textContent = 'TV Connected & Ready';
@@ -593,9 +592,9 @@ function populateUsersDropdown(users, selectedId) {
 async function loadLibraryMedia() {
     elements.seriesView.classList.add('hidden');
     elements.mediaContainer.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Fetching media from library...</p>
+        <div class="loading-state flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+            <div class="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+            <p class="text-xs">Fetching media from library...</p>
         </div>
     `;
 
@@ -604,10 +603,10 @@ async function loadLibraryMedia() {
         renderMediaGrid(items);
     } catch (err) {
         elements.mediaContainer.innerHTML = `
-            <div class="empty-state">
-                <h3>Failed to load library</h3>
-                <p>${escapeHtml(err.message)}</p>
-                <button class="btn btn-primary btn-sm" onclick="openSettingsModal('jellyfin-tab')">Check Jellyfin Settings</button>
+            <div class="empty-state py-16 text-center text-slate-400 space-y-3">
+                <h3 class="text-sm font-semibold text-white">Failed to Load Library</h3>
+                <p class="text-xs max-w-sm mx-auto">${escapeHtml(err.message)}</p>
+                <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" onclick="openSettingsModal('jellyfin-tab')">Check Jellyfin Settings</button>
             </div>
         `;
     }
@@ -616,9 +615,9 @@ async function loadLibraryMedia() {
 function renderMediaGrid(items) {
     if (!items || items.length === 0) {
         elements.mediaContainer.innerHTML = `
-            <div class="empty-state">
-                <h3>No media found</h3>
-                <p>Try searching for a different title or select a different filter.</p>
+            <div class="empty-state py-16 text-center text-slate-400 space-y-2">
+                <h3 class="text-sm font-semibold text-white">No media found</h3>
+                <p class="text-xs max-w-sm mx-auto">Try searching for a different title or select a different filter.</p>
             </div>
         `;
         return;
@@ -633,22 +632,22 @@ function renderMediaGrid(items) {
         const runtimeText = formatRuntime(item.runtime_minutes);
 
         return `
-        <div class="media-card" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-year="${item.year || ''}" data-runtime="${item.runtime_minutes || ''}" data-overview="${escapeHtml(item.overview || '')}">
-            <div class="poster-wrapper">
+        <div class="media-card flex flex-col cursor-pointer group" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-year="${item.year || ''}" data-runtime="${item.runtime_minutes || ''}" data-overview="${escapeHtml(item.overview || '')}">
+            <div class="poster-wrapper relative">
                 ${item.image_tag 
                     ? `<img class="poster-img" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}" loading="lazy">` 
                     : `<div class="poster-fallback">${item.type === 'Movie' ? 'Movie' : 'Series'}</div>`}
                 <span class="media-type-badge">${badgeLabel}</span>
             </div>
-            <div class="card-content">
-                <div class="card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-                <div class="card-meta">
+            <div class="mt-2.5 space-y-1">
+                <div class="text-xs font-semibold text-white truncate" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
                     ${item.year ? `<span>${item.year}</span>` : ''}
                     ${runtimeText ? `<span>· ${runtimeText}</span>` : ''}
                 </div>
-                <div class="card-actions-row">
-                    <button class="card-btn action-schedule-btn">Schedule</button>
-                    <button class="card-btn secondary action-playlist-btn">+ Playlist</button>
+                <div class="flex gap-1.5 pt-1">
+                    <button class="action-schedule-btn flex-1 py-1 px-2 text-[11px] font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition text-center">Schedule</button>
+                    <button class="action-playlist-btn flex-1 py-1 px-2 text-[11px] font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-300 rounded border border-white/[0.08] transition text-center">+ Playlist</button>
                 </div>
             </div>
         </div>
@@ -658,19 +657,10 @@ function renderMediaGrid(items) {
 
     // Attach click listeners to cards
     elements.mediaContainer.querySelectorAll('.media-card').forEach(card => {
+        const data = card.dataset;
+
         card.querySelector('.poster-wrapper').addEventListener('click', (e) => {
             e.stopPropagation();
-            const data = card.dataset;
-            if (data.type === 'Series') {
-                openSeriesDrilldown(data);
-            } else {
-                openScheduleModal({ ...data, target_type: 'media' });
-            }
-        });
-
-        card.querySelector('.card-title').addEventListener('click', (e) => {
-            e.stopPropagation();
-            const data = card.dataset;
             if (data.type === 'Series') {
                 openSeriesDrilldown(data);
             } else {
@@ -680,7 +670,6 @@ function renderMediaGrid(items) {
 
         card.querySelector('.action-schedule-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            const data = card.dataset;
             if (data.type === 'Series') {
                 openSeriesDrilldown(data);
             } else {
@@ -690,7 +679,6 @@ function renderMediaGrid(items) {
 
         card.querySelector('.action-playlist-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            const data = card.dataset;
             if (data.type === 'Series') {
                 openSeriesDrilldown(data);
             } else {
@@ -707,17 +695,19 @@ async function openSeriesDrilldown(seriesData) {
     elements.seriesView.classList.remove('hidden');
 
     elements.seriesHero.innerHTML = `
-        ${seriesData.tag 
-            ? `<img class="hero-poster" src="${getImageUrl(seriesData.id, seriesData.tag)}" alt="${escapeHtml(seriesData.name)}">` 
-            : ''}
-        <div class="hero-info">
-            <h2>${escapeHtml(seriesData.name)}</h2>
-            <div class="hero-meta">${seriesData.year || ''} · TV Series</div>
-            <p class="hero-overview">${escapeHtml(seriesData.overview || '')}</p>
+        <div class="flex flex-col sm:flex-row gap-5 items-start">
+            ${seriesData.tag 
+                ? `<img class="w-24 h-36 object-cover rounded-lg border border-white/[0.08] flex-shrink-0" src="${getImageUrl(seriesData.id, seriesData.tag)}" alt="${escapeHtml(seriesData.name)}">` 
+                : ''}
+            <div class="space-y-1.5">
+                <h2 class="text-xl font-bold text-white tracking-tight">${escapeHtml(seriesData.name)}</h2>
+                <div class="text-xs text-slate-400">${seriesData.year || ''} · TV Series</div>
+                <p class="text-xs text-slate-300 leading-relaxed max-w-2xl">${escapeHtml(seriesData.overview || '')}</p>
+            </div>
         </div>
     `;
 
-    elements.seasonsSlider.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading seasons...</p></div>';
+    elements.seasonsSlider.innerHTML = '<div class="loading-state py-4 text-xs text-slate-400">Loading seasons...</div>';
     elements.episodesList.innerHTML = '';
 
     try {
@@ -725,20 +715,24 @@ async function openSeriesDrilldown(seriesData) {
         state.currentSeasons = seasons;
 
         if (!seasons || seasons.length === 0) {
-            elements.seasonsSlider.innerHTML = '<p class="empty-state">No seasons found.</p>';
+            elements.seasonsSlider.innerHTML = '<p class="text-xs text-slate-400">No seasons found.</p>';
             return;
         }
 
         elements.seasonsSlider.innerHTML = seasons.map((season, idx) => `
-            <button class="season-btn ${idx === 0 ? 'active' : ''}" data-id="${season.id}" data-num="${season.season_number || 1}">
+            <button class="season-btn ${idx === 0 ? 'bg-indigo-600 text-white' : 'bg-[#11131a] text-slate-400 hover:text-white'} px-3.5 py-1 text-xs font-medium rounded-full border border-white/[0.08] transition whitespace-nowrap" data-id="${season.id}">
                 ${escapeHtml(season.name || `Season ${season.season_number || 1}`)}
             </button>
         `).join('');
 
         elements.seasonsSlider.querySelectorAll('.season-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                elements.seasonsSlider.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+                elements.seasonsSlider.querySelectorAll('.season-btn').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white');
+                    b.classList.add('bg-[#11131a]', 'text-slate-400');
+                });
+                btn.classList.remove('bg-[#11131a]', 'text-slate-400');
+                btn.classList.add('bg-indigo-600', 'text-white');
                 loadSeasonEpisodes(seriesData.id, btn.dataset.id);
             });
         });
@@ -746,16 +740,16 @@ async function openSeriesDrilldown(seriesData) {
         loadSeasonEpisodes(seriesData.id, seasons[0].id);
 
     } catch (err) {
-        elements.seasonsSlider.innerHTML = '<p class="empty-state">Failed to load seasons.</p>';
+        elements.seasonsSlider.innerHTML = '<p class="text-xs text-slate-400">Failed to load seasons.</p>';
         showToast('Failed to load seasons', 'error');
     }
 }
 
 async function loadSeasonEpisodes(seriesId, seasonId) {
     elements.episodesList.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Loading episodes...</p>
+        <div class="loading-state py-8 text-center text-xs text-slate-400">
+            <div class="w-5 h-5 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2"></div>
+            Loading episodes...
         </div>
     `;
 
@@ -763,7 +757,7 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
         const episodes = await api.getEpisodes(seriesId, seasonId);
         
         if (!episodes || episodes.length === 0) {
-            elements.episodesList.innerHTML = '<p class="empty-state">No episodes in this season.</p>';
+            elements.episodesList.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">No episodes in this season.</p>';
             return;
         }
 
@@ -771,17 +765,17 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
             const runtimeText = formatRuntime(ep.runtime_minutes);
             const epCode = `S${ep.season_number || 1}E${ep.episode_number || 1}`;
             return `
-            <div class="episode-card" data-id="${ep.id}" data-name="${escapeHtml(state.currentSeries.name)} - ${epCode}: ${escapeHtml(ep.name)}" data-tag="${ep.image_tag || ''}" data-type="Episode" data-runtime="${ep.runtime_minutes || ''}">
-                <div class="ep-num-box">
-                    E${ep.episode_number || '1'}
+            <div class="episode-card flex items-center justify-between gap-4 p-3 bg-[#11131a] hover:bg-[#161922] border border-white/[0.08] rounded-lg transition" data-id="${ep.id}" data-name="${escapeHtml(state.currentSeries.name)} - ${epCode}: ${escapeHtml(ep.name)}" data-tag="${ep.image_tag || ''}" data-type="Episode" data-runtime="${ep.runtime_minutes || ''}">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-8 h-8 rounded bg-[#1a1d27] text-indigo-400 font-bold text-xs flex items-center justify-center flex-shrink-0">E${ep.episode_number || 1}</div>
+                    <div class="min-w-0">
+                        <div class="text-xs font-semibold text-white truncate">${escapeHtml(ep.name)}</div>
+                        <div class="text-[11px] text-slate-400">${runtimeText ? `${runtimeText}` : ''} ${ep.overview ? `· ${escapeHtml(ep.overview.slice(0, 100))}...` : ''}</div>
+                    </div>
                 </div>
-                <div class="ep-info">
-                    <div class="ep-title">${escapeHtml(ep.name)}</div>
-                    <div class="ep-meta">${runtimeText ? `${runtimeText}` : ''} ${ep.overview ? `· ${escapeHtml(ep.overview.slice(0, 120))}...` : ''}</div>
-                </div>
-                <div class="ep-actions-group">
-                    <button class="btn btn-sm btn-primary action-schedule-ep">Schedule</button>
-                    <button class="btn btn-sm btn-secondary action-playlist-ep">+ Playlist</button>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <button class="action-schedule-ep px-2.5 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition">Schedule</button>
+                    <button class="action-playlist-ep px-2.5 py-1 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-300 rounded border border-white/[0.08] transition">+ Playlist</button>
                 </div>
             </div>
         `;}).join('');
@@ -798,7 +792,7 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
         });
 
     } catch (err) {
-        elements.episodesList.innerHTML = '<p class="empty-state">Failed to load episodes.</p>';
+        elements.episodesList.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">Failed to load episodes.</p>';
         showToast('Failed to load episodes', 'error');
     }
 }
@@ -807,7 +801,7 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
 async function loadPlaylists() {
     elements.playlistDetailView.classList.add('hidden');
     elements.playlistsMainContainer.classList.remove('hidden');
-    elements.playlistsGrid.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading playlists...</p></div>';
+    elements.playlistsGrid.innerHTML = '<div class="loading-state py-8 text-xs text-slate-400 col-span-full text-center">Loading playlists...</div>';
 
     try {
         const playlists = await api.getPlaylists();
@@ -815,7 +809,7 @@ async function loadPlaylists() {
         renderPlaylistsGrid(playlists);
         updatePlaylistsCountBadge(playlists.length);
     } catch (err) {
-        elements.playlistsGrid.innerHTML = `<p class="empty-state">Failed to load playlists: ${escapeHtml(err.message)}</p>`;
+        elements.playlistsGrid.innerHTML = `<p class="text-xs text-slate-400 col-span-full text-center">Failed to load playlists: ${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -848,20 +842,20 @@ function renderPlaylistsGrid(playlists) {
     elements.playlistsGrid.innerHTML = playlists.map(pl => {
         const totalDuration = formatRuntime(pl.total_runtime_minutes) || '0m';
         return `
-        <div class="playlist-card" data-id="${pl.id}">
-            <div class="playlist-card-header">
-                <div class="playlist-card-title">${escapeHtml(pl.name)}</div>
+        <div class="playlist-card bg-[#11131a] hover:bg-[#161922] border border-white/[0.08] rounded-xl p-4 flex flex-col justify-between transition cursor-pointer" data-id="${pl.id}">
+            <div class="space-y-1">
+                <div class="text-sm font-semibold text-white">${escapeHtml(pl.name)}</div>
+                <p class="text-xs text-slate-400 line-clamp-2">${escapeHtml(pl.description || 'No description.')}</p>
             </div>
-            <p class="playlist-card-desc">${escapeHtml(pl.description || 'No description.')}</p>
-            <div class="playlist-card-meta">
-                <span class="playlist-meta-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
+            <div class="pt-3 border-t border-white/[0.08] mt-3 flex items-center justify-between text-xs text-slate-400">
+                <span class="bg-[#1a1d27] px-2 py-0.5 rounded text-[11px] font-medium text-slate-300">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
                 <span>${totalDuration}</span>
             </div>
-            <div class="playlist-card-actions">
-                <button class="btn btn-sm btn-primary action-card-edit" data-id="${pl.id}">Edit</button>
-                <button class="btn btn-sm btn-secondary action-card-play" data-id="${pl.id}">Play</button>
-                <button class="btn btn-sm btn-secondary action-card-sched" data-id="${pl.id}">Schedule</button>
-                <button class="btn btn-sm btn-danger action-card-del" data-id="${pl.id}">Delete</button>
+            <div class="playlist-card-actions flex gap-1.5 mt-3 pt-2">
+                <button class="action-card-edit flex-1 py-1 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-200 rounded border border-white/[0.08] transition text-center" data-id="${pl.id}">Edit</button>
+                <button class="action-card-play flex-1 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition text-center" data-id="${pl.id}">Play</button>
+                <button class="action-card-sched flex-1 py-1 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-200 rounded border border-white/[0.08] transition text-center" data-id="${pl.id}">Schedule</button>
+                <button class="action-card-del py-1 px-2.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 rounded border border-rose-500/20 transition text-center" data-id="${pl.id}">Delete</button>
             </div>
         </div>
     `;}).join('');
@@ -884,7 +878,7 @@ function renderPlaylistsGrid(playlists) {
             e.stopPropagation();
             try {
                 await api.playPlaylistNow(id);
-                showToast(`Playing "${pl?.name || 'Playlist'}" on TV!`, 'success');
+                showToast(`Playing "${pl?.name || 'Playlist'}" on TV`, 'success');
             } catch (err) {
                 showToast(err.message, 'error');
             }
@@ -920,7 +914,7 @@ function renderPlaylistsGrid(playlists) {
 async function openPlaylistDetail(playlistId) {
     elements.playlistsMainContainer.classList.add('hidden');
     elements.playlistDetailView.classList.remove('hidden');
-    elements.playlistHero.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading playlist...</p></div>';
+    elements.playlistHero.innerHTML = '<div class="loading-state py-4 text-xs text-slate-400">Loading playlist details...</div>';
     elements.playlistItemsList.innerHTML = '';
 
     try {
@@ -930,11 +924,13 @@ async function openPlaylistDetail(playlistId) {
         const totalDuration = formatRuntime(pl.total_runtime_minutes) || '0m';
 
         elements.playlistHero.innerHTML = `
-            <h2>${escapeHtml(pl.name)}</h2>
-            <p>${escapeHtml(pl.description || 'No description.')}</p>
-            <div class="playlist-hero-stats">
-                <span class="playlist-hero-stat-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
-                <span class="playlist-hero-stat-badge">Total Runtime: ${totalDuration}</span>
+            <div class="space-y-1">
+                <h2 class="text-xl font-bold text-white tracking-tight">${escapeHtml(pl.name)}</h2>
+                <p class="text-xs text-slate-400">${escapeHtml(pl.description || 'No description provided.')}</p>
+                <div class="flex items-center gap-3 pt-2 text-xs">
+                    <span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full font-medium">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
+                    <span class="text-slate-400">Total Duration: <strong class="text-white font-medium">${totalDuration}</strong></span>
+                </div>
             </div>
         `;
 
@@ -942,16 +938,16 @@ async function openPlaylistDetail(playlistId) {
 
     } catch (err) {
         showToast(err.message, 'error');
-        elements.playlistHero.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+        elements.playlistHero.innerHTML = `<p class="text-xs text-slate-400">${escapeHtml(err.message)}</p>`;
     }
 }
 
 function renderPlaylistItemsList(items) {
     if (!items || items.length === 0) {
         elements.playlistItemsList.innerHTML = `
-            <div class="empty-state">
-                <h3>Playlist is Empty</h3>
-                <p>Click "Add Media" above to select movies or episodes from your library.</p>
+            <div class="empty-state py-8 text-center text-slate-400 space-y-1">
+                <h3 class="text-xs font-semibold text-white">Queue is Empty</h3>
+                <p class="text-xs">Click "Add Media" above to append items to this sequence.</p>
             </div>
         `;
         return;
@@ -959,29 +955,26 @@ function renderPlaylistItemsList(items) {
 
     elements.playlistItemsList.innerHTML = items.map((item, idx) => {
         const itemRuntime = formatRuntime(item.runtime_minutes);
-        const isEpisode = item.item_type === 'Episode' || (item.name && item.name.includes(' - S'));
         const orderPadded = String(idx + 1).padStart(2, '0');
         let itemPosterHtml = '';
         if (item.image_tag) {
-            itemPosterHtml = `<img class="playlist-item-poster" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">`;
-        } else if (isEpisode) {
-            itemPosterHtml = `<div class="playlist-item-fallback ep">${escapeHtml(extractEpLabel(item.name))}</div>`;
+            itemPosterHtml = `<img class="w-9 h-14 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">`;
         } else {
-            itemPosterHtml = `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? 'Movie' : 'Show'}</div>`;
+            itemPosterHtml = `<div class="w-9 h-14 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-indigo-400 flex-shrink-0">${item.item_type === 'Episode' ? extractEpLabel(item.name) : 'MEDIA'}</div>`;
         }
 
         return `
-        <div class="playlist-item-row" data-id="${item.id}" data-idx="${idx}">
-            <div class="playlist-item-order">${orderPadded}</div>
+        <div class="playlist-item-row bg-[#11131a] border border-white/[0.08] rounded-lg p-2.5 flex items-center gap-3 transition" data-id="${item.id}" data-idx="${idx}">
+            <span class="text-xs font-bold text-slate-500 w-5 text-center">${orderPadded}</span>
             ${itemPosterHtml}
-            <div class="playlist-item-info">
-                <div class="playlist-item-title">${escapeHtml(item.name)}</div>
-                <div class="playlist-item-meta">${item.item_type || 'Media'} ${itemRuntime ? `· ${itemRuntime}` : ''}</div>
+            <div class="flex-1 min-w-0">
+                <div class="text-xs font-semibold text-white truncate">${escapeHtml(item.name)}</div>
+                <div class="text-[11px] text-slate-400">${item.item_type || 'Media'} ${itemRuntime ? `· ${itemRuntime}` : ''}</div>
             </div>
-            <div class="playlist-item-controls">
-                <button class="btn-icon-subtle move-up" title="Move Up" ${idx === 0 ? 'disabled' : ''}>▲</button>
-                <button class="btn-icon-subtle move-down" title="Move Down" ${idx === items.length - 1 ? 'disabled' : ''}>▼</button>
-                <button class="btn-icon-subtle delete" title="Remove">✕</button>
+            <div class="flex items-center gap-1">
+                <button class="move-up px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs rounded border border-white/[0.08] transition" ${idx === 0 ? 'disabled' : ''}>Up</button>
+                <button class="move-down px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs rounded border border-white/[0.08] transition" ${idx === items.length - 1 ? 'disabled' : ''}>Down</button>
+                <button class="delete px-2 py-1 text-rose-400 hover:bg-rose-500/10 text-xs rounded border border-rose-500/20 transition">Remove</button>
             </div>
         </div>
     `;}).join('');
@@ -1042,29 +1035,29 @@ async function openBrowseAddItemsModal() {
 }
 
 async function loadPlaylistPickerResults(query = '') {
-    elements.playlistPickerContainer.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Searching library...</p></div>';
+    elements.playlistPickerContainer.innerHTML = '<div class="loading-state py-6 text-xs text-slate-400 text-center">Searching library...</div>';
 
     try {
         const items = await api.fetchMedia(query, 'Movie,Series');
         if (!items || items.length === 0) {
-            elements.playlistPickerContainer.innerHTML = '<p class="empty-state">No media found.</p>';
+            elements.playlistPickerContainer.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">No media found.</p>';
             return;
         }
 
         elements.playlistPickerContainer.innerHTML = items.map(item => {
             const runtimeText = formatRuntime(item.runtime_minutes);
             return `
-            <div class="picker-item-row" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-runtime="${item.runtime_minutes || ''}">
-                <div class="picker-item-left">
+            <div class="picker-item-row bg-[#090a0f] border border-white/[0.08] rounded-lg p-2.5 flex items-center justify-between gap-3" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-runtime="${item.runtime_minutes || ''}">
+                <div class="flex items-center gap-2.5 min-w-0">
                     ${item.image_tag 
-                        ? `<img class="picker-item-poster" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
-                        : `<div class="picker-item-fallback">${item.type === 'Movie' ? 'Movie' : 'Series'}</div>`}
-                    <div>
-                        <div class="picker-item-title">${escapeHtml(item.name)}</div>
-                        <div class="picker-item-meta">${item.type} ${item.year ? `(${item.year})` : ''} ${runtimeText ? `· ${runtimeText}` : ''}</div>
+                        ? `<img class="w-8 h-12 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
+                        : `<div class="w-8 h-12 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-indigo-400 flex-shrink-0">MEDIA</div>`}
+                    <div class="min-w-0">
+                        <div class="text-xs font-semibold text-white truncate">${escapeHtml(item.name)}</div>
+                        <div class="text-[11px] text-slate-400">${item.type} ${item.year ? `(${item.year})` : ''} ${runtimeText ? `· ${runtimeText}` : ''}</div>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-primary add-to-active-pl-btn">+ Add</button>
+                <button class="add-to-active-pl-btn px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded transition">+ Add</button>
             </div>
         `;}).join('');
 
@@ -1085,8 +1078,8 @@ async function loadPlaylistPickerResults(query = '') {
                 try {
                     const updatedPl = await api.addItemToPlaylist(state.currentPlaylist.id, itemData);
                     state.currentPlaylist = updatedPl;
-                    btn.textContent = '✓ Added';
-                    btn.classList.replace('btn-primary', 'btn-secondary');
+                    btn.textContent = 'Added';
+                    btn.classList.replace('bg-indigo-600', 'bg-emerald-600');
                     showToast(`Added "${itemData.name}"`, 'success');
                     renderPlaylistItemsList(updatedPl.items);
                 } catch (err) {
@@ -1098,7 +1091,7 @@ async function loadPlaylistPickerResults(query = '') {
         });
 
     } catch (err) {
-        elements.playlistPickerContainer.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+        elements.playlistPickerContainer.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -1110,18 +1103,18 @@ async function openAddToPlaylistModal(mediaData) {
     const isEpisode = mediaData.type === 'Episode' || mediaData.item_type === 'Episode' || (mediaData.name && mediaData.name.includes(' - S'));
     let posterHtml = '';
     if (mediaData.tag) {
-        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(mediaData.id, mediaData.tag)}" alt="${escapeHtml(mediaData.name)}">`;
+        posterHtml = `<img class="w-12 h-18 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(mediaData.id, mediaData.tag)}" alt="${escapeHtml(mediaData.name)}">`;
     } else if (isEpisode) {
-        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(mediaData.name))}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(mediaData.name))}</div>`;
     } else {
-        posterHtml = `<div class="modal-media-fallback">${mediaData.type === 'Movie' ? 'Movie' : 'Series'}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-[#1a1d27] rounded flex items-center justify-center text-xs font-bold text-slate-400 flex-shrink-0">MEDIA</div>`;
     }
 
     elements.addToPlaylistMediaCard.innerHTML = `
         ${posterHtml}
-        <div class="modal-media-info">
-            <h4>${escapeHtml(mediaData.name)}</h4>
-            <p>${mediaData.type || 'Media'} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
+        <div class="min-w-0">
+            <h4 class="text-xs font-semibold text-white truncate">${escapeHtml(mediaData.name)}</h4>
+            <p class="text-[11px] text-slate-400">${mediaData.type || 'Media'} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
         </div>
     `;
 
@@ -1198,20 +1191,20 @@ function openScheduleModal(targetData) {
 
     let posterHtml = '';
     if (targetData.tag) {
-        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(targetData.id, targetData.tag)}" alt="${escapeHtml(targetData.name)}">`;
+        posterHtml = `<img class="w-12 h-18 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(targetData.id, targetData.tag)}" alt="${escapeHtml(targetData.name)}">`;
     } else if (isEpisode) {
-        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(targetData.name))}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(targetData.name))}</div>`;
     } else if (isPlaylist) {
-        posterHtml = `<div class="modal-media-fallback">Playlist</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-indigo-400 flex-shrink-0">LIST</div>`;
     } else {
-        posterHtml = `<div class="modal-media-fallback">${targetData.type === 'Movie' ? 'Movie' : 'Series'}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-[#1a1d27] rounded flex items-center justify-center text-xs font-bold text-slate-400 flex-shrink-0">MEDIA</div>`;
     }
 
     elements.modalMediaCard.innerHTML = `
         ${posterHtml}
-        <div class="modal-media-info">
-            <h4>${escapeHtml(targetData.name)}</h4>
-            <p>${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
+        <div class="min-w-0">
+            <h4 class="text-xs font-semibold text-white truncate">${escapeHtml(targetData.name)}</h4>
+            <p class="text-[11px] text-slate-400">${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
         </div>
     `;
 
@@ -1249,20 +1242,20 @@ function openEditScheduleModal(job) {
 
     let posterHtml = '';
     if (job.image_tag) {
-        posterHtml = `<img class="modal-media-poster" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+        posterHtml = `<img class="w-12 h-18 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
     } else if (isEpisode) {
-        posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(job.name))}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(job.name))}</div>`;
     } else if (isPlaylist) {
-        posterHtml = `<div class="modal-media-fallback">Playlist</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-indigo-400 flex-shrink-0">LIST</div>`;
     } else {
-        posterHtml = `<div class="modal-media-fallback">${job.item_type === 'Movie' ? 'Movie' : 'Series'}</div>`;
+        posterHtml = `<div class="w-12 h-18 bg-[#1a1d27] rounded flex items-center justify-center text-xs font-bold text-slate-400 flex-shrink-0">MEDIA</div>`;
     }
 
     elements.modalMediaCard.innerHTML = `
         ${posterHtml}
-        <div class="modal-media-info">
-            <h4>${escapeHtml(job.name)}</h4>
-            <p>${isPlaylist ? 'Custom Playlist' : (job.item_type || 'Media')}</p>
+        <div class="min-w-0">
+            <h4 class="text-xs font-semibold text-white truncate">${escapeHtml(job.name)}</h4>
+            <p class="text-[11px] text-slate-400">${isPlaylist ? 'Custom Playlist' : (job.item_type || 'Media')}</p>
         </div>
     `;
 
@@ -1290,7 +1283,13 @@ function openEditScheduleModal(job) {
 
 function setRecurrenceFrequency(freq) {
     elements.recurrenceToggleGroup.querySelectorAll('.toggle-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.freq === freq);
+        const isActive = btn.dataset.freq === freq;
+        btn.classList.toggle('active', isActive);
+        if (isActive) {
+            btn.className = 'toggle-btn active py-1.5 text-xs font-medium text-center rounded text-white bg-[#1a1d27] transition';
+        } else {
+            btn.className = 'toggle-btn py-1.5 text-xs font-medium text-center rounded text-slate-400 hover:text-white transition';
+        }
     });
 
     if (freq === 'once') {
@@ -1413,7 +1412,7 @@ async function handleInstantPlay() {
 
 // --- Timeline Rendering ---
 async function loadTimeline() {
-    elements.timelineList.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading scheduled jobs...</p></div>';
+    elements.timelineList.innerHTML = '<div class="loading-state py-8 text-center text-xs text-slate-400">Loading scheduled jobs...</div>';
 
     try {
         const jobs = await api.getSchedules();
@@ -1428,7 +1427,7 @@ async function loadTimeline() {
             elements.pendingCountBadge.classList.add('hidden');
         }
     } catch (err) {
-        elements.timelineList.innerHTML = `<p class="empty-state">Failed to load schedule: ${escapeHtml(err.message)}</p>`;
+        elements.timelineList.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Failed to load schedule: ${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -1457,33 +1456,35 @@ function renderTimeline(jobs) {
         const isEpisode = job.item_type === 'Episode' || (job.name && job.name.includes(' - S'));
         let timelinePosterHtml = '';
         if (job.image_tag) {
-            timelinePosterHtml = `<img class="timeline-poster" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+            timelinePosterHtml = `<img class="w-10 h-15 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
         } else if (isEpisode) {
-            timelinePosterHtml = `<div class="timeline-fallback ep">${escapeHtml(extractEpLabel(job.name))}</div>`;
+            timelinePosterHtml = `<div class="w-10 h-15 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(job.name))}</div>`;
         } else {
-            timelinePosterHtml = `<div class="timeline-fallback">${isPlaylist ? 'Playlist' : 'Media'}</div>`;
+            timelinePosterHtml = `<div class="w-10 h-15 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-slate-400 flex-shrink-0">${isPlaylist ? 'LIST' : 'MEDIA'}</div>`;
         }
 
         return `
-        <div class="timeline-card ${job.status}" data-id="${job.id}">
-            ${timelinePosterHtml}
-            
-            <div class="timeline-details">
-                <div class="timeline-header">
-                    <h4>${escapeHtml(job.name)}</h4>
-                    <span class="status-badge ${job.status}">${job.status}</span>
+        <div class="timeline-card bg-[#11131a] border border-white/[0.08] rounded-xl p-3.5 flex items-center justify-between gap-4" data-id="${job.id}">
+            <div class="flex items-center gap-3 min-w-0">
+                ${timelinePosterHtml}
+                <div class="min-w-0 space-y-1">
+                    <div class="flex items-center gap-2">
+                        <h4 class="text-xs font-semibold text-white truncate">${escapeHtml(job.name)}</h4>
+                        <span class="status-badge ${job.status}">${job.status}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+                        <span class="text-indigo-400 font-medium">${scheduleLabel}</span>
+                        <span>·</span>
+                        <span>${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
+                        ${job.auto_turn_off ? `<span>· Auto-sleep</span>` : ''}
+                    </div>
+                    ${job.error_message ? `<div class="text-rose-400 text-[11px]">${escapeHtml(job.error_message)}</div>` : ''}
                 </div>
-                <div class="timeline-meta">
-                    <span class="schedule-time-badge">${scheduleLabel}</span>
-                    <span class="type-pill">${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
-                    ${job.auto_turn_off ? `<span class="type-pill">Auto-sleep</span>` : ''}
-                </div>
-                ${job.error_message ? `<div style="color: var(--status-danger); font-size: 0.75rem; margin-top: 0.25rem;">${escapeHtml(job.error_message)}</div>` : ''}
             </div>
 
-            <div class="timeline-actions" style="display: flex; gap: 0.4rem;">
-                <button class="btn btn-sm btn-secondary edit-job-btn" data-id="${job.id}">Edit</button>
-                <button class="btn btn-sm btn-danger cancel-job-btn" data-id="${job.id}">
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <button class="edit-job-btn px-3 py-1.5 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-300 rounded border border-white/[0.08] transition" data-id="${job.id}">Edit</button>
+                <button class="cancel-job-btn px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 rounded border border-rose-500/20 transition" data-id="${job.id}">
                     ${job.status === 'pending' ? 'Cancel' : 'Delete'}
                 </button>
             </div>
@@ -1576,7 +1577,7 @@ async function handleSaveTvSettings() {
 async function handleTestWake() {
     try {
         const res = await api.testWake();
-        showToast(res.message || 'Wake command sent', 'success');
+        showToast(res.message || 'Screen wake sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1585,7 +1586,7 @@ async function handleTestWake() {
 async function handleTestSleep() {
     try {
         const res = await api.testSleep();
-        showToast(res.message || 'Sleep command sent', 'success');
+        showToast(res.message || 'Standby command sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1621,7 +1622,7 @@ async function handleTestJellyfin() {
         showToast(err.message, 'error');
     } finally {
         elements.testJfBtn.disabled = false;
-        elements.testJfBtn.textContent = 'Test Connection & Fetch Users';
+        elements.testJfBtn.textContent = 'Test Connection & Fetch Profiles';
     }
 }
 
@@ -1666,10 +1667,24 @@ function handleAutoDetectTimezone() {
 // --- Navigation & View Switching ---
 function switchView(viewName) {
     state.activeView = viewName;
-    elements.viewTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === viewName));
+    elements.viewTabs.forEach(tab => {
+        const isActive = tab.dataset.view === viewName;
+        tab.classList.toggle('active', isActive);
+        if (isActive) {
+            tab.className = 'nav-pill view-tab active px-3.5 py-1 text-xs font-medium rounded-full transition-all text-white bg-[#1a1d27] shadow-sm flex items-center gap-1.5';
+        } else {
+            tab.className = 'nav-pill view-tab px-3.5 py-1 text-xs font-medium rounded-full transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
+        }
+    });
+
     elements.browserView.classList.toggle('active', viewName === 'browser');
+    elements.browserView.classList.toggle('hidden', viewName !== 'browser');
+
     elements.playlistsView.classList.toggle('active', viewName === 'playlists');
+    elements.playlistsView.classList.toggle('hidden', viewName !== 'playlists');
+
     elements.timelineView.classList.toggle('active', viewName === 'timeline');
+    elements.timelineView.classList.toggle('hidden', viewName !== 'timeline');
 
     if (viewName === 'playlists') {
         loadPlaylists();
@@ -1717,8 +1732,12 @@ function setupEventListeners() {
     // Category / Type Chips
     elements.filterChips.forEach(chip => {
         chip.addEventListener('click', () => {
-            elements.filterChips.forEach(c => c.classList.remove('active'));
+            elements.filterChips.forEach(c => {
+                c.classList.remove('active');
+                c.className = 'filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition';
+            });
             chip.classList.add('active');
+            chip.className = 'filter-chip chip active px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-300 hover:text-white transition';
             state.mediaTypeFilter = chip.dataset.type || 'Movie,Series';
             state.categoryFilter = chip.dataset.category || '';
             loadLibraryMedia();
@@ -1758,7 +1777,7 @@ function setupEventListeners() {
 
     elements.editPlaylistInfoBtn.addEventListener('click', () => {
         if (!state.currentPlaylist) return;
-        elements.playlistFormModalTitle.textContent = `Edit Playlist "${state.currentPlaylist.name}"`;
+        elements.playlistFormModalTitle.textContent = `Edit Playlist: ${state.currentPlaylist.name}`;
         elements.playlistNameInput.value = state.currentPlaylist.name || '';
         elements.playlistDescInput.value = state.currentPlaylist.description || '';
         elements.playlistFormModal.classList.remove('hidden');
@@ -1785,7 +1804,7 @@ function setupEventListeners() {
         elements.playPlaylistNowBtn.textContent = 'Starting...';
         try {
             await api.playPlaylistNow(state.currentPlaylist.id);
-            showToast(`Playing playlist "${state.currentPlaylist.name}" on TV!`, 'success');
+            showToast(`Playing playlist "${state.currentPlaylist.name}" on TV`, 'success');
         } catch (e) {
             showToast(e.message, 'error');
         } finally {
@@ -1821,7 +1840,7 @@ function setupEventListeners() {
         const name = elements.playlistNameInput.value.trim();
         const desc = elements.playlistDescInput.value.trim();
         if (!name) {
-            showToast('Please enter a playlist name', 'error');
+            showToast('Please enter a playlist title', 'error');
             return;
         }
 

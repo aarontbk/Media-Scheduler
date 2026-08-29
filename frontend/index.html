@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,241 +7,275 @@
     <link rel="icon" type="image/png" href="/static/logo.png">
     <link rel="shortcut icon" type="image/png" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/static/logo.png">
-    <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        canvas: '#090a0f',
+                        surface: '#11131a',
+                        'surface-hover': '#161922',
+                        elevated: '#1a1d27',
+                        'elevated-hover': '#222634',
+                        accent: {
+                            DEFAULT: '#6366f1',
+                            hover: '#4f46e5',
+                            muted: 'rgba(99, 102, 241, 0.12)',
+                            border: 'rgba(99, 102, 241, 0.35)',
+                        },
+                        border: {
+                            subtle: 'rgba(255, 255, 255, 0.08)',
+                            muted: 'rgba(255, 255, 255, 0.15)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-    <!-- Studio Header -->
-    <header class="app-header">
-        <div class="header-inner">
-            <div class="brand">
-                <img src="/static/logo.png" alt="Logo" class="brand-logo">
-                <span class="brand-name">Media Scheduler</span>
+<body class="bg-[#090a0f] text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    
+    <!-- Top Studio Header -->
+    <header class="sticky top-0 z-50 bg-[#090a0f]/80 backdrop-blur-xl border-b border-white/[0.08] h-14">
+        <div class="max-w-7xl mx-auto px-4 h-full flex items-center justify-between gap-4">
+            
+            <!-- Brand -->
+            <div class="flex items-center gap-3">
+                <img src="/static/logo.png" alt="Logo" class="w-7 h-7 object-contain">
+                <span class="text-sm font-semibold tracking-tight text-white hidden sm:inline-block">Media Scheduler</span>
             </div>
             
-            <!-- Segmented Navigation -->
-            <nav class="nav-pill-group">
-                <button class="nav-pill view-tab active" data-view="browser">Library</button>
-                <button class="nav-pill view-tab" data-view="playlists">
-                    Playlists <span class="badge hidden" id="playlistsCountBadge">0</span>
+            <!-- Segmented Navigation Pills (Zero Icons) -->
+            <nav class="flex items-center bg-[#11131a] p-1 rounded-full border border-white/[0.08]">
+                <button class="nav-pill view-tab active px-3.5 py-1 text-xs font-medium rounded-full transition-all text-white bg-[#1a1d27] shadow-sm" data-view="browser">
+                    Library
                 </button>
-                <button class="nav-pill view-tab" data-view="timeline">
-                    Schedule <span class="badge hidden" id="pendingCountBadge">0</span>
+                <button class="nav-pill view-tab px-3.5 py-1 text-xs font-medium rounded-full transition-all text-slate-400 hover:text-white flex items-center gap-1.5" data-view="playlists">
+                    Playlists <span class="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full hidden" id="playlistsCountBadge">0</span>
+                </button>
+                <button class="nav-pill view-tab px-3.5 py-1 text-xs font-medium rounded-full transition-all text-slate-400 hover:text-white flex items-center gap-1.5" data-view="timeline">
+                    Schedule <span class="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full hidden" id="pendingCountBadge">0</span>
                 </button>
             </nav>
 
-            <div class="header-actions">
-                <button class="hardware-status-btn" id="tvStatusPill" title="TV Connection Details">
-                    <span class="status-led" id="headerStatusDot"></span>
+            <!-- Hardware Status & Settings -->
+            <div class="flex items-center gap-2">
+                <button class="flex items-center gap-2 px-3 py-1 text-xs font-medium text-slate-300 bg-[#11131a] hover:bg-[#161922] border border-white/[0.08] rounded-full transition-colors" id="tvStatusPill" title="TV Connection Details">
+                    <span class="w-2 h-2 rounded-full bg-slate-500 transition-colors status-led" id="headerStatusDot"></span>
                     <span id="headerStatusLabel">Checking TV...</span>
                 </button>
-                <button class="icon-btn" id="openSettingsBtn" title="Settings">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
+                <button class="px-3 py-1 text-xs font-medium text-slate-300 bg-[#11131a] hover:bg-[#161922] hover:text-white border border-white/[0.08] rounded-full transition-colors" id="openSettingsBtn">
+                    Settings
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Setup Notice Banner -->
-    <div class="setup-banner hidden" id="setupBanner">
-        <div class="banner-content">
-            <div class="banner-text">
-                <strong id="bannerTitle">Setup Required:</strong>
-                <span id="bannerMsg">Configure TV IP and Jellyfin connection to start scheduling.</span>
+    <!-- Setup Banner -->
+    <div class="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 hidden" id="setupBanner">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4 text-xs">
+            <div class="text-amber-200">
+                <strong id="bannerTitle">Configuration Required:</strong>
+                <span id="bannerMsg" class="text-amber-300/90 ml-1">Setup your TV IP address or Jellyfin connection to start automation.</span>
             </div>
-            <button class="btn btn-sm btn-primary" id="bannerActionBtn">Configure Now</button>
+            <button class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded text-xs transition" id="bannerActionBtn">Configure Now</button>
         </div>
     </div>
 
     <!-- Main Workspace -->
-    <main class="app-main">
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
         
         <!-- VIEW 1: Media Browser -->
         <section class="view-section active" id="browserView">
             
-            <!-- Controls Bar (Search + Chips) -->
-            <div class="controls-row">
-                <div class="search-wrapper">
-                    <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" class="search-input" id="searchInput" placeholder="Search movies, TV shows, anime..." autocomplete="off">
-                    <button class="clear-search-btn hidden" id="clearSearchBtn">✕</button>
+            <!-- Controls Bar: Search & Category Filter Pills -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+                
+                <!-- Search Input -->
+                <div class="relative flex-1 max-w-md">
+                    <input type="text" class="w-full bg-[#11131a] border border-white/[0.08] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none transition" id="searchInput" placeholder="Search movies, TV shows, anime..." autocomplete="off">
+                    <button class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs px-1 hidden" id="clearSearchBtn">✕</button>
                 </div>
                 
-                <div class="filter-group">
-                    <button class="filter-chip chip active" data-type="Movie,Series" data-category="">All</button>
-                    <button class="filter-chip chip" data-type="Series" data-category="">TV Shows</button>
-                    <button class="filter-chip chip" data-type="Movie" data-category="">Movies</button>
-                    <button class="filter-chip chip" data-type="Movie,Series" data-category="anime">Anime</button>
-                    <button class="filter-chip-icon" id="refreshMediaBtn" title="Reload library">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                        </svg>
+                <!-- Category Filter Pills -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    <button class="filter-chip chip active px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-300 hover:text-white transition" data-type="Movie,Series" data-category="">All</button>
+                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Series" data-category="">TV Shows</button>
+                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Movie" data-category="">Movies</button>
+                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Movie,Series" data-category="anime">Anime</button>
+                    <button class="px-2.5 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.05] transition" id="refreshMediaBtn" title="Reload library">
+                        Refresh
                     </button>
                 </div>
             </div>
 
             <!-- Media Grid -->
             <div class="media-container" id="mediaContainer">
-                <div class="loading-state">
-                    <div class="spinner"></div>
-                    <p>Loading Jellyfin library...</p>
+                <div class="loading-state flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                    <div class="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p class="text-xs">Loading library...</p>
                 </div>
             </div>
 
             <!-- Series Drill-Down View -->
-            <div class="series-drilldown hidden" id="seriesView">
-                <div class="drilldown-header">
-                    <button class="back-btn" id="backToLibraryBtn">
+            <div class="series-drilldown hidden space-y-6" id="seriesView">
+                <div>
+                    <button class="px-3 py-1.5 text-xs font-medium rounded-md bg-[#11131a] hover:bg-[#161922] text-slate-300 border border-white/[0.08] transition" id="backToLibraryBtn">
                         ← Back to Library
                     </button>
                 </div>
 
-                <div class="series-hero" id="seriesHero">
+                <div class="series-hero bg-[#11131a] border border-white/[0.08] rounded-xl p-5" id="seriesHero">
                     <!-- Populated dynamically -->
                 </div>
 
-                <div class="seasons-slider" id="seasonsSlider">
+                <div class="seasons-slider flex gap-1.5 overflow-x-auto pb-2" id="seasonsSlider">
                     <!-- Season buttons -->
                 </div>
 
-                <div class="episodes-list" id="episodesList">
-                    <!-- Episode cards -->
+                <div class="episodes-list flex flex-col gap-2" id="episodesList">
+                    <!-- Episode rows -->
                 </div>
             </div>
         </section>
 
         <!-- VIEW 2: Playlists View -->
-        <section class="view-section" id="playlistsView">
-            <div id="playlistsMainContainer">
-                <div class="section-title-row">
+        <section class="view-section hidden" id="playlistsView">
+            <div id="playlistsMainContainer" class="space-y-6">
+                <div class="flex items-center justify-between">
                     <div>
-                        <h2>Playlists</h2>
-                        <p class="section-subtitle">Chain multiple movies or episodes into sequential playback sessions.</p>
+                        <h2 class="text-lg font-semibold text-white tracking-tight">Playlists</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Chain movies or episodes into sequential playback queues.</p>
                     </div>
-                    <button class="btn btn-primary" id="openCreatePlaylistBtn">Create Playlist</button>
+                    <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition shadow-sm" id="openCreatePlaylistBtn">
+                        Create Playlist
+                    </button>
                 </div>
 
-                <div class="playlists-grid" id="playlistsGrid">
+                <div class="playlists-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="playlistsGrid">
                     <!-- Populated dynamically -->
                 </div>
 
-                <div class="empty-state hidden" id="emptyPlaylistsState">
-                    <h3>No Playlists Yet</h3>
-                    <p>Create a playlist or click "Add to Playlist" on any media item in your library.</p>
-                    <button class="btn btn-primary" id="createFirstPlaylistBtn">Create Playlist</button>
+                <div class="empty-state hidden py-16 text-center text-slate-400 space-y-3" id="emptyPlaylistsState">
+                    <h3 class="text-sm font-semibold text-white">No Playlists Created</h3>
+                    <p class="text-xs max-w-sm mx-auto">Create a playlist or click "Add to Playlist" on any media item in your library.</p>
+                    <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="createFirstPlaylistBtn">Create Playlist</button>
                 </div>
             </div>
 
             <!-- Playlist Detail / Items View -->
-            <div class="playlist-detail-view hidden" id="playlistDetailView">
-                <div class="drilldown-header">
-                    <button class="back-btn" id="backToPlaylistsBtn">
+            <div class="playlist-detail-view hidden space-y-5" id="playlistDetailView">
+                <div class="flex items-center justify-between">
+                    <button class="px-3 py-1.5 text-xs font-medium rounded-md bg-[#11131a] hover:bg-[#161922] text-slate-300 border border-white/[0.08] transition" id="backToPlaylistsBtn">
                         ← Back to Playlists
                     </button>
-                    <div class="playlist-detail-actions">
-                        <button class="btn btn-primary btn-sm" id="openAddItemsToPlaylistBtn">Add Media</button>
-                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">Edit Details</button>
-                        <button class="btn btn-danger btn-sm" id="deletePlaylistBtn">Delete</button>
+                    <div class="flex items-center gap-2">
+                        <button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="openAddItemsToPlaylistBtn">Add Media</button>
+                        <button class="px-3 py-1.5 bg-[#11131a] hover:bg-[#161922] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="editPlaylistInfoBtn">Edit Info</button>
+                        <button class="px-3 py-1.5 text-rose-400 hover:bg-rose-500/10 text-xs font-medium rounded-md border border-rose-500/20 transition" id="deletePlaylistBtn">Delete</button>
                     </div>
                 </div>
 
-                <div class="playlist-hero" id="playlistHero">
+                <div class="playlist-hero bg-[#11131a] border border-white/[0.08] rounded-xl p-5 space-y-2" id="playlistHero">
                     <!-- Title, Description, Total Duration -->
                 </div>
 
-                <div class="playlist-action-bar">
-                    <button class="btn btn-secondary" id="playPlaylistNowBtn">Play on TV</button>
-                    <button class="btn btn-primary" id="schedulePlaylistBtn">Schedule Playlist</button>
+                <div class="flex items-center gap-2.5 pt-2">
+                    <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="schedulePlaylistBtn">Schedule Playlist</button>
+                    <button class="px-4 py-2 bg-[#1a1d27] hover:bg-[#222634] text-slate-200 text-xs font-medium rounded-md border border-white/[0.08] transition" id="playPlaylistNowBtn">Play on TV</button>
                 </div>
 
-                <div class="section-title-row" style="margin-top: 1.25rem; margin-bottom: 0.5rem;">
-                    <h3>Queue Sequence</h3>
-                    <span class="text-tertiary" style="font-size: 0.8rem;">Use Up/Down to adjust order</span>
-                </div>
-
-                <div class="playlist-items-list" id="playlistItemsList">
-                    <!-- Items in order with move up / move down / remove -->
+                <div class="pt-4 border-t border-white/[0.08]">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Queue Order</h3>
+                        <span class="text-[11px] text-slate-500">Reorder with Up / Down buttons</span>
+                    </div>
+                    <div class="playlist-items-list space-y-2" id="playlistItemsList">
+                        <!-- Items in sequence -->
+                    </div>
                 </div>
             </div>
         </section>
 
         <!-- VIEW 3: Schedule Timeline -->
-        <section class="view-section" id="timelineView">
-            <div class="section-title-row">
+        <section class="view-section hidden space-y-5" id="timelineView">
+            <div class="flex items-center justify-between">
                 <div>
-                    <h2>Scheduled Jobs</h2>
-                    <p class="section-subtitle">Automated TV wake-up, playback execution, and graceful auto-sleep.</p>
+                    <h2 class="text-lg font-semibold text-white tracking-tight">Scheduled Jobs</h2>
+                    <p class="text-xs text-slate-400 mt-0.5">Automated TV wake-up, playback execution, and auto-sleep timers.</p>
                 </div>
-                <button class="btn btn-secondary btn-sm" id="refreshTimelineBtn">Refresh</button>
+                <button class="px-3 py-1.5 bg-[#11131a] hover:bg-[#161922] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="refreshTimelineBtn">Refresh</button>
             </div>
 
-            <div class="timeline-list" id="timelineList">
+            <div class="timeline-list space-y-2.5" id="timelineList">
                 <!-- Timeline items -->
             </div>
 
-            <div class="empty-state hidden" id="emptyTimelineState">
-                <h3>No Scheduled Jobs</h3>
-                <p>Select a movie, episode, or playlist to set up automatic playback.</p>
-                <button class="btn btn-primary" id="goToLibraryBtn">Browse Library</button>
+            <div class="empty-state hidden py-16 text-center text-slate-400 space-y-3" id="emptyTimelineState">
+                <h3 class="text-sm font-semibold text-white">No Scheduled Playback</h3>
+                <p class="text-xs max-w-sm mx-auto">Select any movie, episode, or playlist to automate scheduled playback.</p>
+                <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="goToLibraryBtn">Browse Library</button>
             </div>
         </section>
     </main>
 
-    <!-- Schedule Modal -->
-    <div class="modal-overlay hidden" id="scheduleModal">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 id="scheduleModalTitle">Schedule Playback</h3>
-                <button class="modal-close-btn" id="closeScheduleModal">✕</button>
+    <!-- Schedule Modal (Create & Edit) -->
+    <div class="modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden" id="scheduleModal">
+        <div class="bg-[#11131a] border border-white/[0.12] rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+            
+            <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white" id="scheduleModalTitle">Schedule Playback</h3>
+                <button class="text-slate-400 hover:text-white text-xs p-1" id="closeScheduleModal">✕</button>
             </div>
 
-            <div class="modal-body">
-                <!-- Selected Target Summary -->
-                <div class="selected-media-card" id="modalMediaCard">
+            <div class="p-5 space-y-4 flex-1">
+                <!-- Selected Target Preview -->
+                <div class="selected-media-card bg-[#090a0f] border border-white/[0.08] rounded-lg p-3 flex items-center gap-3" id="modalMediaCard">
                     <!-- Populated dynamically -->
                 </div>
 
-                <!-- Recurrence Selector -->
-                <div class="form-section">
-                    <label class="form-label">Frequency</label>
-                    <div class="recurrence-toggle-group" id="recurrenceToggleGroup">
-                        <button class="toggle-btn active" data-freq="once">Once</button>
-                        <button class="toggle-btn" data-freq="daily">Daily</button>
-                        <button class="toggle-btn" data-freq="weekly">Weekly</button>
-                        <button class="toggle-btn" data-freq="custom_days">Specific Days</button>
+                <!-- Recurrence Frequency Selector -->
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-slate-300">Playback Recurrence</label>
+                    <div class="grid grid-cols-4 bg-[#090a0f] p-1 rounded-lg border border-white/[0.08]" id="recurrenceToggleGroup">
+                        <button class="toggle-btn active py-1.5 text-xs font-medium text-center rounded text-white bg-[#1a1d27] transition" data-freq="once">Once</button>
+                        <button class="toggle-btn py-1.5 text-xs font-medium text-center rounded text-slate-400 hover:text-white transition" data-freq="daily">Daily</button>
+                        <button class="toggle-btn py-1.5 text-xs font-medium text-center rounded text-slate-400 hover:text-white transition" data-freq="weekly">Weekly</button>
+                        <button class="toggle-btn py-1.5 text-xs font-medium text-center rounded text-slate-400 hover:text-white transition" data-freq="custom_days">Days</button>
                     </div>
                 </div>
 
-                <!-- Timing Section: Once -->
-                <div class="form-section" id="timingOnceSection">
-                    <label class="form-label" for="scheduleDatetime">Date & Time</label>
-                    <input type="datetime-local" class="form-input" id="scheduleDatetime">
+                <!-- Once Timing Section -->
+                <div class="space-y-2" id="timingOnceSection">
+                    <label class="block text-xs font-medium text-slate-300" for="scheduleDatetime">Date & Time</label>
+                    <input type="datetime-local" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="scheduleDatetime">
                     
-                    <div class="preset-times">
-                        <span class="preset-label">Quick Presets:</span>
-                        <div class="preset-buttons">
-                            <button class="btn-preset" data-offset="15">+15 min</button>
-                            <button class="btn-preset" data-offset="30">+30 min</button>
-                            <button class="btn-preset" data-preset="tonight-20">Tonight 20:00</button>
-                            <button class="btn-preset" data-preset="tonight-21">Tonight 21:30</button>
+                    <div class="space-y-1 pt-1">
+                        <span class="text-[11px] text-slate-500">Quick Presets:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button class="btn-preset px-2 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-[11px] text-slate-300" data-offset="15">+15m</button>
+                            <button class="btn-preset px-2 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-[11px] text-slate-300" data-offset="30">+30m</button>
+                            <button class="btn-preset px-2 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-[11px] text-slate-300" data-preset="tonight-20">Tonight 20:00</button>
+                            <button class="btn-preset px-2 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-[11px] text-slate-300" data-preset="tonight-21">Tonight 21:30</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Timing Section: Daily / Weekly / Specific Days -->
-                <div class="form-section hidden" id="timingRecurringSection">
+                <!-- Recurring Timing Section -->
+                <div class="space-y-3 hidden" id="timingRecurringSection">
                     
-                    <!-- Weekly Day Selector -->
-                    <div class="form-group hidden" id="weeklyDayGroup">
-                        <label class="form-label" for="scheduleWeeklyDay">Day of Week</label>
-                        <select class="form-input" id="scheduleWeeklyDay">
+                    <div class="space-y-1 hidden" id="weeklyDayGroup">
+                        <label class="block text-xs font-medium text-slate-300" for="scheduleWeeklyDay">Day of Week</label>
+                        <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="scheduleWeeklyDay">
                             <option value="mon">Monday</option>
                             <option value="tue">Tuesday</option>
                             <option value="wed">Wednesday</option>
@@ -252,252 +286,235 @@
                         </select>
                     </div>
 
-                    <!-- Custom Days Selector (Pill Checkboxes) -->
-                    <div class="form-group hidden" id="customDaysGroup">
-                        <label class="form-label">Active Days</label>
-                        <div class="day-checkbox-pills">
-                            <label class="day-pill"><input type="checkbox" value="sun"><span>Sun</span></label>
-                            <label class="day-pill"><input type="checkbox" value="mon"><span>Mon</span></label>
-                            <label class="day-pill"><input type="checkbox" value="tue"><span>Tue</span></label>
-                            <label class="day-pill"><input type="checkbox" value="wed"><span>Wed</span></label>
-                            <label class="day-pill"><input type="checkbox" value="thu"><span>Thu</span></label>
-                            <label class="day-pill"><input type="checkbox" value="fri" checked><span>Fri</span></label>
-                            <label class="day-pill"><input type="checkbox" value="sat" checked><span>Sat</span></label>
+                    <div class="space-y-1.5 hidden" id="customDaysGroup">
+                        <label class="block text-xs font-medium text-slate-300">Select Active Days</label>
+                        <div class="flex gap-1.5 flex-wrap">
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="sun" class="sr-only"><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Sun</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="mon" class="sr-only"><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Mon</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="tue" class="sr-only"><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Tue</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="wed" class="sr-only"><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Wed</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="thu" class="sr-only"><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Thu</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="fri" class="sr-only" checked><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Fri</span></label>
+                            <label class="day-pill cursor-pointer"><input type="checkbox" value="sat" class="sr-only" checked><span class="block px-2.5 py-1 bg-[#090a0f] border border-white/[0.08] rounded-full text-xs font-medium text-slate-300">Sat</span></label>
                         </div>
                     </div>
 
-                    <!-- Recurring Time of Day -->
-                    <div class="form-group">
-                        <label class="form-label" for="scheduleTimeOfDay">Playback Time</label>
-                        <input type="time" class="form-input" id="scheduleTimeOfDay" value="20:00">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-medium text-slate-300" for="scheduleTimeOfDay">Playback Time</label>
+                        <input type="time" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="scheduleTimeOfDay" value="20:00">
                     </div>
                 </div>
 
-                <!-- Auto Power Off Toggle -->
-                <div class="form-section">
-                    <label class="toggle-checkbox-label">
-                        <input type="checkbox" id="scheduleAutoTurnOff" checked>
-                        <div class="checkbox-desc">
-                            <strong>Graceful TV Power-Off</strong>
-                            <p>Monitor playback and put TV to sleep when finished.</p>
+                <!-- Auto Power-Off Toggle -->
+                <div class="bg-[#090a0f] border border-white/[0.08] rounded-lg p-3">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="scheduleAutoTurnOff" class="w-4 h-4 rounded accent-indigo-600" checked>
+                        <div>
+                            <span class="text-xs font-medium text-white block">Auto TV Power-Off</span>
+                            <span class="text-[11px] text-slate-400 block">Monitor session and put TV on standby after playback.</span>
                         </div>
                     </label>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="instantPlayBtn">Play Now</button>
-                <button class="btn btn-primary" id="confirmScheduleBtn">Schedule Job</button>
+            <div class="px-5 py-3.5 border-t border-white/[0.08] flex items-center justify-end gap-2 bg-[#090a0f]/40">
+                <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md transition" id="instantPlayBtn">Play Now</button>
+                <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition shadow-sm" id="confirmScheduleBtn">Schedule Job</button>
             </div>
         </div>
     </div>
 
     <!-- Browse & Add to Playlist Modal -->
-    <div class="modal-overlay hidden" id="browseAddItemsModal">
-        <div class="modal-card modal-lg">
-            <div class="modal-header">
-                <h3 id="browseAddItemsModalTitle">Add Media to Playlist</h3>
-                <button class="modal-close-btn" id="closeBrowseAddItemsModal">✕</button>
+    <div class="modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden" id="browseAddItemsModal">
+        <div class="bg-[#11131a] border border-white/[0.12] rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
+            
+            <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white" id="browseAddItemsModalTitle">Add Media to Playlist</h3>
+                <button class="text-slate-400 hover:text-white text-xs p-1" id="closeBrowseAddItemsModal">✕</button>
             </div>
-            <div class="modal-body">
-                <div class="search-wrapper" style="margin-bottom: 1rem; width: 100%; max-width: 100%;">
-                    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" class="search-input" id="playlistSearchInput" placeholder="Search library to add..." autocomplete="off">
-                </div>
-                <div class="playlist-picker-container" id="playlistPickerContainer">
-                    <!-- Media search results with "+ Add" buttons -->
-                </div>
+
+            <div class="p-4 border-b border-white/[0.08]">
+                <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none" id="playlistSearchInput" placeholder="Search library to add..." autocomplete="off">
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" id="closeBrowseAddItemsBtn">Done</button>
+
+            <div class="p-4 overflow-y-auto flex-1 space-y-2 max-h-[50vh]" id="playlistPickerContainer">
+                <!-- Media items with '+ Add' -->
+            </div>
+
+            <div class="px-5 py-3.5 border-t border-white/[0.08] flex justify-end bg-[#090a0f]/40">
+                <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="closeBrowseAddItemsBtn">Done</button>
             </div>
         </div>
     </div>
 
-    <!-- Add to Playlist Modal (from library cards) -->
-    <div class="modal-overlay hidden" id="addToPlaylistModal">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3>Add to Playlist</h3>
-                <button class="modal-close-btn" id="closeAddToPlaylistModal">✕</button>
+    <!-- Add to Playlist Modal (from media cards) -->
+    <div class="modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden" id="addToPlaylistModal">
+        <div class="bg-[#11131a] border border-white/[0.12] rounded-xl w-full max-w-md shadow-2xl flex flex-col">
+            
+            <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white">Add to Playlist</h3>
+                <button class="text-slate-400 hover:text-white text-xs p-1" id="closeAddToPlaylistModal">✕</button>
             </div>
-            <div class="modal-body">
-                <div class="selected-media-card" id="addToPlaylistMediaCard"></div>
+
+            <div class="p-5 space-y-4">
+                <div class="selected-media-card bg-[#090a0f] border border-white/[0.08] rounded-lg p-3 flex items-center gap-3" id="addToPlaylistMediaCard"></div>
                 
-                <div class="form-section">
-                    <label class="form-label" for="targetPlaylistSelect">Choose Playlist</label>
-                    <select class="form-input" id="targetPlaylistSelect">
-                        <!-- Populated dynamically -->
+                <div class="space-y-1">
+                    <label class="block text-xs font-medium text-slate-300" for="targetPlaylistSelect">Choose Existing Playlist</label>
+                    <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="targetPlaylistSelect">
+                        <!-- Options loaded dynamically -->
                     </select>
                 </div>
 
-                <div class="form-divider"><span>OR CREATE NEW</span></div>
+                <div class="relative flex py-1 items-center">
+                    <div class="flex-grow border-t border-white/[0.08]"></div>
+                    <span class="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">or create new</span>
+                    <div class="flex-grow border-t border-white/[0.08]"></div>
+                </div>
 
-                <div class="form-section">
-                    <label class="form-label" for="newPlaylistInlineName">New Playlist Name</label>
-                    <input type="text" class="form-input" id="newPlaylistInlineName" placeholder="e.g. Weekend Anime" autocomplete="off">
+                <div class="space-y-1">
+                    <label class="block text-xs font-medium text-slate-300" for="newPlaylistInlineName">New Playlist Name</label>
+                    <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="newPlaylistInlineName" placeholder="e.g. Weekend Feature" autocomplete="off">
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelAddToPlaylistBtn">Cancel</button>
-                <button class="btn btn-primary" id="confirmAddToPlaylistBtn">Add to Playlist</button>
+
+            <div class="px-5 py-3.5 border-t border-white/[0.08] flex justify-end gap-2 bg-[#090a0f]/40">
+                <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md transition" id="cancelAddToPlaylistBtn">Cancel</button>
+                <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="confirmAddToPlaylistBtn">Add to Playlist</button>
             </div>
         </div>
     </div>
 
-    <!-- Create / Edit Playlist Modal -->
-    <div class="modal-overlay hidden" id="playlistFormModal">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 id="playlistFormModalTitle">New Playlist</h3>
-                <button class="modal-close-btn" id="closePlaylistFormModal">✕</button>
+    <!-- Create / Edit Playlist Info Modal -->
+    <div class="modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden" id="playlistFormModal">
+        <div class="bg-[#11131a] border border-white/[0.12] rounded-xl w-full max-w-md shadow-2xl flex flex-col">
+            
+            <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white" id="playlistFormModalTitle">New Playlist</h3>
+                <button class="text-slate-400 hover:text-white text-xs p-1" id="closePlaylistFormModal">✕</button>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label" for="playlistNameInput">Playlist Name</label>
-                    <input type="text" class="form-input" id="playlistNameInput" placeholder="e.g. Friday Shabbat Movies" autocomplete="off">
+
+            <div class="p-5 space-y-4">
+                <div class="space-y-1">
+                    <label class="block text-xs font-medium text-slate-300" for="playlistNameInput">Playlist Title</label>
+                    <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="playlistNameInput" placeholder="e.g. Friday Shabbat Movies" autocomplete="off">
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="playlistDescInput">Description (Optional)</label>
-                    <textarea class="form-input" id="playlistDescInput" rows="2" placeholder="e.g. Movies for dinner sequence"></textarea>
+                <div class="space-y-1">
+                    <label class="block text-xs font-medium text-slate-300" for="playlistDescInput">Description (Optional)</label>
+                    <textarea class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="playlistDescInput" rows="2" placeholder="e.g. Movies for Friday night"></textarea>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelPlaylistFormBtn">Cancel</button>
-                <button class="btn btn-primary" id="savePlaylistFormBtn">Save Playlist</button>
+
+            <div class="px-5 py-3.5 border-t border-white/[0.08] flex justify-end gap-2 bg-[#090a0f]/40">
+                <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md transition" id="cancelPlaylistFormBtn">Cancel</button>
+                <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="savePlaylistFormBtn">Save Playlist</button>
             </div>
         </div>
     </div>
 
     <!-- Settings Modal -->
-    <div class="modal-overlay hidden" id="settingsModal">
-        <div class="modal-card modal-lg">
-            <div class="modal-header">
-                <h3>Settings</h3>
-                <button class="modal-close-btn" id="closeSettingsModal">✕</button>
+    <div class="modal-overlay fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden" id="settingsModal">
+        <div class="bg-[#11131a] border border-white/[0.12] rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+            
+            <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white">Settings</h3>
+                <button class="text-slate-400 hover:text-white text-xs p-1" id="closeSettingsModal">✕</button>
             </div>
 
-            <!-- Settings Tabs -->
-            <div class="settings-tabs">
-                <button class="settings-tab active" data-tab="tv-tab">Android TV (ADB)</button>
-                <button class="settings-tab" data-tab="jellyfin-tab">Jellyfin Server</button>
-                <button class="settings-tab" data-tab="system-tab">Timezone & Clock</button>
+            <!-- Segmented Settings Tabs -->
+            <div class="flex border-b border-white/[0.08] bg-[#090a0f]">
+                <button class="settings-tab active flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="tv-tab">Android TV (ADB)</button>
+                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="jellyfin-tab">Jellyfin Server</button>
+                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="system-tab">Timezone & Clock</button>
             </div>
 
-            <div class="modal-body">
+            <div class="p-5 flex-1">
                 
-                <!-- TAB 1: Android TV Connection -->
-                <div class="settings-panel active" id="tv-tab">
+                <!-- TAB 1: Android TV -->
+                <div class="settings-panel active space-y-4" id="tv-tab">
                     
-                    <!-- Live ADB Status Box -->
-                    <div class="adb-status-box" id="adbStatusBox">
-                        <div class="status-box-header">
-                            <div class="status-indicator">
-                                <span class="status-led" id="adbBoxDot"></span>
-                                <strong id="adbBoxTitle">Checking TV Status...</strong>
+                    <div class="bg-[#090a0f] border border-white/[0.08] rounded-lg p-3.5 space-y-2" id="adbStatusBox">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-slate-500 status-led" id="adbBoxDot"></span>
+                                <strong class="text-xs text-white" id="adbBoxTitle">Checking TV Status...</strong>
                             </div>
-                            <button class="btn btn-sm btn-secondary" id="refreshAdbStatusBtn">Check</button>
+                            <button class="px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-[11px] font-medium rounded border border-white/[0.08] transition" id="refreshAdbStatusBtn">Check</button>
                         </div>
-                        <p class="status-box-msg" id="adbBoxMessage">Connecting to TV...</p>
+                        <p class="text-xs text-slate-400" id="adbBoxMessage">Connecting to TV...</p>
 
-                        <!-- Action Area for 'unauthorized' prompt on screen -->
-                        <div class="tv-prompt-callout hidden" id="tvPromptCallout">
-                            <div class="prompt-text">
-                                <strong>Authorization Required</strong>
-                                <p>A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV.</p>
-                                <p>Check <strong>"Always allow from this computer"</strong> and press OK on your remote.</p>
-                            </div>
-                            <button class="btn btn-primary btn-sm" id="verifyAuthBtn">Verify Authorization</button>
+                        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200 space-y-2 hidden" id="tvPromptCallout">
+                            <strong>Authorization Required:</strong>
+                            <p class="text-slate-300">A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV. Check <em>"Always allow"</em> and press OK.</p>
+                            <button class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded text-xs transition" id="verifyAuthBtn">Verify Authorization</button>
                         </div>
                     </div>
 
-                    <!-- TV Connection Form -->
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label" for="tvIpInput">TCL TV IP Address</label>
-                            <input type="text" class="form-input" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
-                            <span class="form-hint">Found in TV Settings → Network & Internet → Network Details.</span>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1 col-span-2 sm:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300" for="tvIpInput">TV IP Address</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label" for="tvPortInput">ADB Port</label>
-                            <input type="number" class="form-input" id="tvPortInput" value="5555">
+                        <div class="space-y-1 col-span-2 sm:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300" for="tvPortInput">ADB Port</label>
+                            <input type="number" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvPortInput" value="5555">
                         </div>
 
-                        <div class="form-group full-width">
-                            <label class="form-label" for="tvNameInput">TV Device Name (in Jellyfin)</label>
-                            <input type="text" class="form-input" id="tvNameInput" placeholder="e.g. Living Room TV">
-                            <span class="form-hint">Used by Jellyfin to target the correct playback session.</span>
+                        <div class="space-y-1 col-span-2">
+                            <label class="block text-xs font-medium text-slate-300" for="tvNameInput">TV Device Name (in Jellyfin)</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvNameInput" placeholder="e.g. Living Room TV">
                         </div>
                     </div>
 
-                    <div class="action-buttons-row">
-                        <button class="btn btn-primary" id="connectTvBtn">Connect / Pair TV</button>
-                        <button class="btn btn-secondary" id="saveTvSettingsBtn">Save TV Settings</button>
+                    <div class="flex gap-2">
+                        <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="connectTvBtn">Connect / Pair TV</button>
+                        <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="saveTvSettingsBtn">Save Settings</button>
                     </div>
 
-                    <!-- Test Actions -->
-                    <div class="test-actions-section">
-                        <h4>Test TV Controls:</h4>
-                        <div class="test-buttons-grid">
-                            <button class="btn btn-secondary btn-sm" id="testWakeBtn">Test Screen Wake</button>
-                            <button class="btn btn-secondary btn-sm" id="testLaunchAppBtn">Test Launch Jellyfin</button>
-                            <button class="btn btn-secondary btn-sm" id="testSleepBtn">Test Standby / Sleep</button>
+                    <div class="pt-3 border-t border-white/[0.08] space-y-2">
+                        <h4 class="text-xs font-medium text-slate-400">Test TV Remote Controls:</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testWakeBtn">Screen Wake</button>
+                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testLaunchAppBtn">Launch Jellyfin</button>
+                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testSleepBtn">Standby / Sleep</button>
                         </div>
                     </div>
-
-                    <!-- Step-by-Step Setup Instructions Accordion -->
-                    <details class="setup-guide">
-                        <summary>How to enable ADB Network Debugging on Android TV</summary>
-                        <div class="guide-steps">
-                            <ol>
-                                <li><strong>Enable Developer Mode:</strong> Go to <em>Settings → System → About</em>. Click <strong>Android TV OS build</strong> 7 times until it says <em>"You are now a developer!"</em>.</li>
-                                <li><strong>Enable Network Debugging:</strong> In <em>Settings → System → Developer options</em>, toggle <strong>USB debugging</strong> and <strong>Network debugging</strong> to ON.</li>
-                                <li><strong>Enter TV IP:</strong> Input your TV's IP address above and click <strong>Connect / Pair TV</strong>.</li>
-                                <li><strong>Allow Connection:</strong> When the prompt appears on TV, check <em>"Always allow"</em> and press OK.</li>
-                            </ol>
-                        </div>
-                    </details>
                 </div>
 
-                <!-- TAB 2: Jellyfin Server Connection -->
-                <div class="settings-panel" id="jellyfin-tab">
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="jfUrlInput">Jellyfin Server URL</label>
-                        <input type="text" class="form-input" id="jfUrlInput" placeholder="http://192.168.1.50:8096 or http://media:8096">
+                <!-- TAB 2: Jellyfin Server -->
+                <div class="settings-panel hidden space-y-4" id="jellyfin-tab">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-medium text-slate-300" for="jfUrlInput">Jellyfin Server URL</label>
+                        <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUrlInput" placeholder="http://media:8096">
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label" for="jfKeyInput">Jellyfin API Key</label>
-                        <input type="password" class="form-input" id="jfKeyInput" placeholder="Enter API Key">
-                        <span class="form-hint">Create in Jellyfin Dashboard → Administration → API Keys.</span>
+                    <div class="space-y-1">
+                        <label class="block text-xs font-medium text-slate-300" for="jfKeyInput">Jellyfin API Key</label>
+                        <input type="password" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfKeyInput" placeholder="Enter API Key">
                     </div>
 
-                    <div class="action-buttons-row">
-                        <button class="btn btn-secondary" id="testJfBtn">Test Connection & Fetch Users</button>
+                    <div>
+                        <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="testJfBtn">Test Connection & Fetch Profiles</button>
                     </div>
 
-                    <div class="form-group" style="margin-top: 1rem;">
-                        <label class="form-label" for="jfUserSelect">Target User Profile</label>
-                        <select class="form-input" id="jfUserSelect">
-                            <option value="">-- Click 'Test Connection' to load profiles --</option>
+                    <div class="space-y-1 pt-2">
+                        <label class="block text-xs font-medium text-slate-300" for="jfUserSelect">Target User Profile</label>
+                        <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUserSelect">
+                            <option value="">-- Test Connection to load user profiles --</option>
                         </select>
-                        <span class="form-hint">Profile used for media library queries and session tracking.</span>
                     </div>
 
-                    <div class="action-buttons-row" style="margin-top: 1.5rem;">
-                        <button class="btn btn-primary" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
+                    <div class="pt-2">
+                        <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
                     </div>
                 </div>
 
-                <!-- TAB 3: Timezone & System Clock -->
-                <div class="settings-panel" id="system-tab">
-                    <div class="form-group">
-                        <label class="form-label" for="timezoneSelect">Scheduler Timezone</label>
-                        <select class="form-input" id="timezoneSelect">
+                <!-- TAB 3: Timezone & Clock -->
+                <div class="settings-panel hidden space-y-4" id="system-tab">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-medium text-slate-300" for="timezoneSelect">Scheduler Timezone</label>
+                        <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="timezoneSelect">
                             <option value="Asia/Jerusalem">Asia/Jerusalem (Israel Standard / Daylight Time, UTC+2/+3)</option>
                             <option value="Europe/Athens">Europe/Athens (Greece, UTC+2/+3)</option>
                             <option value="Europe/Paris">Europe/Paris (CET/CEST, UTC+1/+2)</option>
@@ -506,23 +523,23 @@
                             <option value="America/Los_Angeles">America/Los_Angeles (Pacific Time, UTC-8/-7)</option>
                             <option value="UTC">UTC (Coordinated Universal Time)</option>
                         </select>
-                        <span class="form-hint" id="browserTzHint">Browser detected: Checking...</span>
+                        <span class="text-[11px] text-slate-500 block" id="browserTzHint">Browser detected: Checking...</span>
                     </div>
 
-                    <div class="form-grid" style="margin-top: 1rem;">
-                        <div class="form-group">
-                            <label class="form-label">Your Browser Time</label>
-                            <input type="text" class="form-input" id="browserClockPreview" readonly style="opacity: 0.8;">
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-400">Browser Clock</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] rounded-md px-3 py-1.5 text-xs text-slate-300" id="browserClockPreview" readonly>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Scheduler Target Time</label>
-                            <input type="text" class="form-input" id="serverClockPreview" readonly style="opacity: 0.8;">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-400">Scheduler Clock</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] rounded-md px-3 py-1.5 text-xs text-slate-300" id="serverClockPreview" readonly>
                         </div>
                     </div>
 
-                    <div class="action-buttons-row" style="margin-top: 1.5rem;">
-                        <button class="btn btn-primary" id="saveTimezoneBtn">Save Timezone</button>
-                        <button class="btn btn-secondary" id="autoDetectTzBtn">Sync with Browser Timezone</button>
+                    <div class="flex gap-2 pt-2">
+                        <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="saveTimezoneBtn">Save Timezone</button>
+                        <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="autoDetectTzBtn">Sync with Browser</button>
                     </div>
                 </div>
 
@@ -531,7 +548,7 @@
     </div>
 
     <!-- Toast Notification Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none" id="toastContainer"></div>
 
     <script src="/static/app.js"></script>
 </body>
