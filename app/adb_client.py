@@ -232,3 +232,34 @@ class ADBClient:
             
         logger.info("TV wake-up sequence completed successfully")
         return True
+
+    async def turn_off_tv(self) -> bool:
+        """Gracefully put TV to sleep / standby mode after playback finishes."""
+        if not self.tv_address:
+            return False
+            
+        logger.info(f"Initiating graceful TV power-off / sleep sequence for {self.tv_address}")
+        
+        # Ensure we are connected
+        if not await self.is_reachable():
+            await self.connect()
+            
+        # Step 1: Return to home screen to stop any active video decoders cleanly
+        await self.send_home()
+        await asyncio.sleep(1)
+        
+        # Step 2: Send KEYCODE_SLEEP (223) to enter standby
+        rc, stdout, stderr = await self._run_adb(
+            "-s", self.tv_address, "shell", "input", "keyevent", "KEYCODE_SLEEP"
+        )
+        if rc == 0:
+            logger.info(f"TV KEYCODE_SLEEP command sent successfully to {self.tv_address}")
+            return True
+            
+        # Fallback: Send KEYCODE_POWER (26)
+        rc, _, _ = await self._run_adb(
+            "-s", self.tv_address, "shell", "input", "keyevent", "KEYCODE_POWER"
+        )
+        logger.info(f"Fallback KEYCODE_POWER command sent (rc={rc})")
+        return rc == 0
+

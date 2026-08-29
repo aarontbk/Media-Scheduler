@@ -1,12 +1,15 @@
 // --- Application State ---
 const state = {
-    activeView: 'browser', // 'browser' | 'timeline'
+    activeView: 'browser', // 'browser' | 'playlists' | 'timeline'
     mediaTypeFilter: 'Movie,Series',
     categoryFilter: '',
     searchQuery: '',
-    selectedMedia: null,
+    selectedMedia: null, // target for scheduling (media item or playlist)
+    targetForPlaylist: null, // item to add to playlist
     currentSeries: null,
     currentSeasons: [],
+    playlists: [],
+    currentPlaylist: null,
     settings: {
         jellyfin_url: '',
         jellyfin_api_key: '',
@@ -38,10 +41,12 @@ const elements = {
     bannerMsg: document.getElementById('bannerMsg'),
     bannerActionBtn: document.getElementById('bannerActionBtn'),
     pendingCountBadge: document.getElementById('pendingCountBadge'),
+    playlistsCountBadge: document.getElementById('playlistsCountBadge'),
 
     // Navigation
     viewTabs: document.querySelectorAll('.view-tab'),
     browserView: document.getElementById('browserView'),
+    playlistsView: document.getElementById('playlistsView'),
     timelineView: document.getElementById('timelineView'),
 
     // Media Browser
@@ -58,12 +63,53 @@ const elements = {
     seasonsSlider: document.getElementById('seasonsSlider'),
     episodesList: document.getElementById('episodesList'),
 
+    // Playlists View
+    playlistsMainContainer: document.getElementById('playlistsMainContainer'),
+    playlistsGrid: document.getElementById('playlistsGrid'),
+    emptyPlaylistsState: document.getElementById('emptyPlaylistsState'),
+    openCreatePlaylistBtn: document.getElementById('openCreatePlaylistBtn'),
+    createFirstPlaylistBtn: document.getElementById('createFirstPlaylistBtn'),
+    playlistDetailView: document.getElementById('playlistDetailView'),
+    backToPlaylistsBtn: document.getElementById('backToPlaylistsBtn'),
+    editPlaylistInfoBtn: document.getElementById('editPlaylistInfoBtn'),
+    deletePlaylistBtn: document.getElementById('deletePlaylistBtn'),
+    playlistHero: document.getElementById('playlistHero'),
+    playPlaylistNowBtn: document.getElementById('playPlaylistNowBtn'),
+    schedulePlaylistBtn: document.getElementById('schedulePlaylistBtn'),
+    playlistItemsList: document.getElementById('playlistItemsList'),
+
+    // Add to Playlist Modal
+    addToPlaylistModal: document.getElementById('addToPlaylistModal'),
+    closeAddToPlaylistModal: document.getElementById('closeAddToPlaylistModal'),
+    addToPlaylistMediaCard: document.getElementById('addToPlaylistMediaCard'),
+    targetPlaylistSelect: document.getElementById('targetPlaylistSelect'),
+    newPlaylistInlineName: document.getElementById('newPlaylistInlineName'),
+    cancelAddToPlaylistBtn: document.getElementById('cancelAddToPlaylistBtn'),
+    confirmAddToPlaylistBtn: document.getElementById('confirmAddToPlaylistBtn'),
+
+    // Create / Edit Playlist Modal
+    playlistFormModal: document.getElementById('playlistFormModal'),
+    closePlaylistFormModal: document.getElementById('closePlaylistFormModal'),
+    playlistFormModalTitle: document.getElementById('playlistFormModalTitle'),
+    playlistNameInput: document.getElementById('playlistNameInput'),
+    playlistDescInput: document.getElementById('playlistDescInput'),
+    cancelPlaylistFormBtn: document.getElementById('cancelPlaylistFormBtn'),
+    savePlaylistFormBtn: document.getElementById('savePlaylistFormBtn'),
+
     // Schedule Modal
     scheduleModal: document.getElementById('scheduleModal'),
     closeScheduleModal: document.getElementById('closeScheduleModal'),
     modalMediaCard: document.getElementById('modalMediaCard'),
+    recurrenceToggleGroup: document.getElementById('recurrenceToggleGroup'),
+    timingOnceSection: document.getElementById('timingOnceSection'),
+    timingRecurringSection: document.getElementById('timingRecurringSection'),
     scheduleDatetime: document.getElementById('scheduleDatetime'),
     presetButtons: document.querySelectorAll('.btn-preset'),
+    weeklyDayGroup: document.getElementById('weeklyDayGroup'),
+    scheduleWeeklyDay: document.getElementById('scheduleWeeklyDay'),
+    customDaysGroup: document.getElementById('customDaysGroup'),
+    scheduleTimeOfDay: document.getElementById('scheduleTimeOfDay'),
+    scheduleAutoTurnOff: document.getElementById('scheduleAutoTurnOff'),
     instantPlayBtn: document.getElementById('instantPlayBtn'),
     confirmScheduleBtn: document.getElementById('confirmScheduleBtn'),
 
@@ -93,6 +139,7 @@ const elements = {
     saveTvSettingsBtn: document.getElementById('saveTvSettingsBtn'),
     testWakeBtn: document.getElementById('testWakeBtn'),
     testLaunchAppBtn: document.getElementById('testLaunchAppBtn'),
+    testSleepBtn: document.getElementById('testSleepBtn'),
 
     // Jellyfin Setup Fields
     jfUrlInput: document.getElementById('jfUrlInput'),
@@ -104,33 +151,39 @@ const elements = {
     toastContainer: document.getElementById('toastContainer'),
 };
 
-// --- Toast Feedback ---
+// --- Helper & Utility Functions ---
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
-    let icon = '✓';
-    if (type === 'error') icon = '✕';
-    if (type === 'warning') icon = '⚠️';
-    
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    const icon = type === 'success' ? '✓' : (type === 'error' ? '✕' : 'ℹ');
+    toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
     elements.toastContainer.appendChild(toast);
-    
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 3500);
 }
 
-// --- Helper Functions ---
-function getImageUrl(itemId, tag) {
-    if (!itemId) return '';
-    let url = `/api/image/${itemId}`;
-    if (tag) url += `?tag=${tag}`;
-    return url;
+function debounce(fn, delay = 150) {
+    return (...args) => {
+        clearTimeout(state.searchDebounceTimer);
+        state.searchDebounceTimer = setTimeout(() => fn(...args), delay);
+    };
 }
 
-function formatDatetime(isoStr) {
+function formatRuntime(minutes) {
+    if (!minutes || minutes <= 0) return '';
+    const m = parseInt(minutes, 10);
+    if (isNaN(m)) return '';
+    if (m >= 60) {
+        const hours = Math.floor(m / 60);
+        const remMins = m % 60;
+        return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+    }
+    return `${m}m`;
+}
+
+function formatDateTime(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr);
     return d.toLocaleDateString(undefined, {
@@ -143,6 +196,22 @@ function formatDatetime(isoStr) {
 function toLocalDatetimeString(date) {
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getImageUrl(itemId, tag) {
+    let url = `/api/image/${itemId}`;
+    if (tag) url += `?tag=${tag}`;
+    return url;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // --- API Client Layer ---
@@ -169,7 +238,6 @@ const api = {
         if (url) params.append('url', url);
         if (apiKey) params.append('api_key', apiKey);
         if (params.toString()) endpoint += `?${params.toString()}`;
-        
         const res = await fetch(endpoint);
         return await res.json();
     },
@@ -202,6 +270,15 @@ const api = {
         return await res.json();
     },
 
+    async testSleep() {
+        const res = await fetch('/api/tv/test-sleep', { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Sleep command failed');
+        }
+        return await res.json();
+    },
+
     async testLaunch() {
         const res = await fetch('/api/tv/test-launch', { method: 'POST' });
         if (!res.ok) {
@@ -216,7 +293,6 @@ const api = {
         if (query.trim()) params.append('q', query.trim());
         if (type) params.append('type', type);
         if (category) params.append('category', category);
-        
         const res = await fetch(`/api/search?${params.toString()}`);
         if (!res.ok) throw new Error('Failed to fetch media from library');
         return await res.json();
@@ -234,6 +310,80 @@ const api = {
         return await res.json();
     },
 
+    // Playlists API
+    async getPlaylists() {
+        const res = await fetch('/api/playlists');
+        if (!res.ok) throw new Error('Failed to load playlists');
+        return await res.json();
+    },
+
+    async createPlaylist(data) {
+        const res = await fetch('/api/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create playlist');
+        return await res.json();
+    },
+
+    async getPlaylist(id) {
+        const res = await fetch(`/api/playlists/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch playlist details');
+        return await res.json();
+    },
+
+    async updatePlaylist(id, data) {
+        const res = await fetch(`/api/playlists/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update playlist');
+        return await res.json();
+    },
+
+    async deletePlaylist(id) {
+        const res = await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete playlist');
+    },
+
+    async addItemToPlaylist(playlistId, itemData) {
+        const res = await fetch(`/api/playlists/${playlistId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(itemData),
+        });
+        if (!res.ok) throw new Error('Failed to add item to playlist');
+        return await res.json();
+    },
+
+    async removeItemFromPlaylist(playlistId, itemId) {
+        const res = await fetch(`/api/playlists/${playlistId}/items/${itemId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to remove item from playlist');
+        return await res.json();
+    },
+
+    async reorderPlaylist(playlistId, itemIds) {
+        const res = await fetch(`/api/playlists/${playlistId}/reorder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_ids: itemIds }),
+        });
+        if (!res.ok) throw new Error('Failed to reorder playlist');
+        return await res.json();
+    },
+
+    async playPlaylistNow(playlistId) {
+        const res = await fetch(`/api/playlists/${playlistId}/play-now`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to start playlist playback');
+        }
+        return await res.json();
+    },
+
+    // Scheduling API
     async getSchedules() {
         const res = await fetch('/api/schedule');
         if (!res.ok) throw new Error('Failed to load schedule');
@@ -255,56 +405,53 @@ const api = {
 
     async deleteSchedule(jobId) {
         const res = await fetch(`/api/schedule/${jobId}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Failed to cancel job');
-        return true;
+        if (!res.ok) throw new Error('Failed to cancel scheduled job');
     },
 
-    async playNow(itemIds) {
+    async playNow(itemIds, autoTurnOff = true) {
         const res = await fetch('/api/play-now', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_ids: Array.isArray(itemIds) ? itemIds : [itemIds] }),
+            body: JSON.stringify({ item_ids: itemIds, auto_turn_off: autoTurnOff }),
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || 'Immediate playback failed');
+            throw new Error(err.detail || 'Play Now command failed');
         }
         return await res.json();
     },
 };
 
-// --- Initialization & Status Updating ---
+// --- Initialization ---
 async function initApp() {
     setupEventListeners();
-    await loadSettingsAndStatus();
+    await loadInitialSettings();
     loadLibraryMedia();
+    loadPlaylistsCount();
     loadTimeline();
-    
-    // Background polling for TV status and Timeline
-    setInterval(updateTvStatusUI, 20000);
-    setInterval(loadTimeline, 45000);
+
+    // Start background TV status polling every 25 seconds
+    setInterval(updateTvStatusUI, 25000);
 }
 
-async function loadSettingsAndStatus() {
+async function loadInitialSettings() {
     try {
         const settings = await api.getSettings();
         state.settings = settings;
         
-        // Populate settings form inputs
         elements.tvIpInput.value = settings.tv_ip || '';
         elements.tvPortInput.value = settings.adb_port || 5555;
         elements.tvNameInput.value = settings.tv_device_name || '';
         elements.jfUrlInput.value = settings.jellyfin_url || '';
         elements.jfKeyInput.value = settings.jellyfin_api_key || '';
 
-        // Populate users dropdown if available
         if (settings.jellyfin_users && settings.jellyfin_users.length > 0) {
             populateUsersDropdown(settings.jellyfin_users, settings.jellyfin_user_id);
         }
 
         updateTvStatusUI();
     } catch (err) {
-        console.warn('Initial settings load warning:', err);
+        console.warn('Settings load notice:', err);
     }
 }
 
@@ -313,7 +460,6 @@ async function updateTvStatusUI() {
         const status = await api.getTvStatus();
         state.tvStatus = status;
 
-        // 1. Header Status Pill
         if (status.session_found && status.is_active) {
             elements.headerStatusDot.className = 'status-dot connected';
             elements.headerStatusLabel.textContent = status.device_name || 'TV Online';
@@ -331,7 +477,6 @@ async function updateTvStatusUI() {
             elements.headerStatusLabel.textContent = 'TV Offline';
         }
 
-        // 2. Banner configuration alert
         if (!status.configured_tv_ip || !state.settings.jellyfin_api_key) {
             elements.setupBanner.classList.remove('hidden');
             if (!status.configured_tv_ip) {
@@ -343,9 +488,7 @@ async function updateTvStatusUI() {
             elements.setupBanner.classList.add('hidden');
         }
 
-        // 3. Settings Modal Status Box
         renderAdbStatusBox(status);
-
     } catch (err) {
         elements.headerStatusDot.className = 'status-dot offline';
         elements.headerStatusLabel.textContent = 'Server Offline';
@@ -358,7 +501,7 @@ function renderAdbStatusBox(status) {
     
     if (state === 'device') {
         elements.adbBoxTitle.textContent = '🟢 TV Connected & Authorized';
-        elements.adbBoxMessage.textContent = status.adb_message || 'The TV is authorized and ready for automated wake-up and playback.';
+        elements.adbBoxMessage.textContent = status.adb_message || 'The TV is authorized and ready for automated wake-up, playback, and auto-sleep.';
         elements.tvPromptCallout.classList.add('hidden');
     } else if (state === 'unauthorized') {
         elements.adbBoxTitle.textContent = '🟡 Authorization Required';
@@ -382,7 +525,7 @@ function renderAdbStatusBox(status) {
 function populateUsersDropdown(users, selectedId) {
     elements.jfUserSelect.innerHTML = users.map(u => `
         <option value="${u.id}" ${u.id === selectedId ? 'selected' : ''}>
-            ${u.name} ${u.is_admin ? '(Admin)' : ''}
+            ${escapeHtml(u.name)} ${u.is_admin ? '(Admin)' : ''}
         </option>
     `).join('');
 }
@@ -405,7 +548,7 @@ async function loadLibraryMedia() {
             <div class="empty-state">
                 <div class="empty-icon">⚠️</div>
                 <h3>Failed to load library</h3>
-                <p>${err.message}</p>
+                <p>${escapeHtml(err.message)}</p>
                 <button class="btn btn-primary btn-sm" onclick="openSettingsModal('jellyfin-tab')">Check Jellyfin Settings</button>
             </div>
         `;
@@ -418,7 +561,7 @@ function renderMediaGrid(items) {
             <div class="empty-state">
                 <div class="empty-icon">🔍</div>
                 <h3>No media found</h3>
-                <p>Try searching for a different title or select 'All' filter.</p>
+                <p>Try searching for a different title or select a different filter.</p>
             </div>
         `;
         return;
@@ -426,20 +569,29 @@ function renderMediaGrid(items) {
 
     const cardsHtml = items.map(item => {
         const isAnime = (item.genres && item.genres.some(g => g.toLowerCase() === 'anime')) || state.categoryFilter === 'anime';
-        const badgeLabel = isAnime ? '🌸 Anime' : (item.type === 'Movie' ? 'Movie' : 'Series');
+        let badgeLabel = item.type === 'Movie' ? 'Movie' : 'Series';
+        if (isAnime) {
+            badgeLabel = item.type === 'Movie' ? 'Anime Movie' : 'Anime';
+        }
+        const runtimeText = formatRuntime(item.runtime_minutes);
+
         return `
         <div class="media-card" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-year="${item.year || ''}" data-runtime="${item.runtime_minutes || ''}" data-overview="${escapeHtml(item.overview || '')}">
             <div class="poster-wrapper">
                 ${item.image_tag 
                     ? `<img class="poster-img" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}" loading="lazy">` 
-                    : `<div class="poster-fallback">${isAnime ? '🌸' : (item.type === 'Movie' ? '🎬' : '📺')}</div>`}
+                    : `<div class="poster-fallback">${item.type === 'Movie' ? '🎬' : '📺'}</div>`}
                 <span class="media-type-badge ${isAnime ? 'anime' : ''}">${badgeLabel}</span>
             </div>
             <div class="card-content">
                 <div class="card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
                 <div class="card-meta">
                     ${item.year ? `<span>${item.year}</span>` : ''}
-                    ${item.runtime_minutes ? `<span>• ${item.runtime_minutes}m</span>` : ''}
+                    ${runtimeText ? `<span>• ${runtimeText}</span>` : ''}
+                </div>
+                <div class="card-actions-row">
+                    <button class="card-btn action-schedule-btn">📅 Schedule</button>
+                    <button class="card-btn secondary action-playlist-btn">➕ Playlist</button>
                 </div>
             </div>
         </div>
@@ -449,12 +601,47 @@ function renderMediaGrid(items) {
 
     // Attach click listeners to cards
     elements.mediaContainer.querySelectorAll('.media-card').forEach(card => {
-        card.addEventListener('click', () => {
+        // Poster / card click
+        card.querySelector('.poster-wrapper').addEventListener('click', (e) => {
+            e.stopPropagation();
             const data = card.dataset;
             if (data.type === 'Series') {
                 openSeriesDrilldown(data);
             } else {
-                openScheduleModal(data);
+                openScheduleModal({ ...data, target_type: 'media' });
+            }
+        });
+
+        // Title click
+        card.querySelector('.card-title').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const data = card.dataset;
+            if (data.type === 'Series') {
+                openSeriesDrilldown(data);
+            } else {
+                openScheduleModal({ ...data, target_type: 'media' });
+            }
+        });
+
+        // Schedule button click
+        card.querySelector('.action-schedule-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const data = card.dataset;
+            if (data.type === 'Series') {
+                openSeriesDrilldown(data);
+            } else {
+                openScheduleModal({ ...data, target_type: 'media' });
+            }
+        });
+
+        // Add to playlist button click
+        card.querySelector('.action-playlist-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const data = card.dataset;
+            if (data.type === 'Series') {
+                openSeriesDrilldown(data);
+            } else {
+                openAddToPlaylistModal(data);
             }
         });
     });
@@ -466,18 +653,18 @@ async function openSeriesDrilldown(seriesData) {
     elements.mediaContainer.innerHTML = '';
     elements.seriesView.classList.remove('hidden');
 
-    // Render Hero Info
     elements.seriesHero.innerHTML = `
         ${seriesData.tag 
-            ? `<img class="hero-poster" src="${getImageUrl(seriesData.id, seriesData.tag)}" alt="${seriesData.name}">` 
+            ? `<img class="hero-poster" src="${getImageUrl(seriesData.id, seriesData.tag)}" alt="${escapeHtml(seriesData.name)}">` 
             : ''}
-        <div class="hero-details">
-            <h2>${seriesData.name} ${seriesData.year ? `(${seriesData.year})` : ''}</h2>
-            <p>${seriesData.overview || 'TV Series'}</p>
+        <div class="hero-info">
+            <h2>${escapeHtml(seriesData.name)}</h2>
+            <div class="hero-meta">${seriesData.year || ''} • TV Series</div>
+            <p class="hero-overview">${escapeHtml(seriesData.overview || '')}</p>
         </div>
     `;
 
-    elements.seasonsSlider.innerHTML = '<div class="spinner"></div>';
+    elements.seasonsSlider.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading seasons...</p></div>';
     elements.episodesList.innerHTML = '';
 
     try {
@@ -485,30 +672,29 @@ async function openSeriesDrilldown(seriesData) {
         state.currentSeasons = seasons;
 
         if (!seasons || seasons.length === 0) {
-            elements.seasonsSlider.innerHTML = '<p class="form-hint">No seasons found.</p>';
+            elements.seasonsSlider.innerHTML = '<p class="empty-state">No seasons found.</p>';
             return;
         }
 
-        elements.seasonsSlider.innerHTML = seasons.map((s, idx) => `
-            <button class="season-tab ${idx === 0 ? 'active' : ''}" data-season-id="${s.id}">
-                ${escapeHtml(s.name)}
+        elements.seasonsSlider.innerHTML = seasons.map((season, idx) => `
+            <button class="season-btn ${idx === 0 ? 'active' : ''}" data-id="${season.id}" data-num="${season.season_number || 1}">
+                ${escapeHtml(season.name || `Season ${season.season_number || 1}`)}
             </button>
         `).join('');
 
-        elements.seasonsSlider.querySelectorAll('.season-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                elements.seasonsSlider.querySelectorAll('.season-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                loadSeasonEpisodes(seriesData.id, tab.dataset.seasonId);
+        elements.seasonsSlider.querySelectorAll('.season-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                elements.seasonsSlider.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadSeasonEpisodes(seriesData.id, btn.dataset.id);
             });
         });
 
-        // Load first season episodes
         loadSeasonEpisodes(seriesData.id, seasons[0].id);
 
     } catch (err) {
+        elements.seasonsSlider.innerHTML = '<p class="empty-state">Failed to load seasons.</p>';
         showToast('Failed to load seasons', 'error');
-        elements.seasonsSlider.innerHTML = '<p class="form-hint">Error loading seasons.</p>';
     }
 }
 
@@ -528,22 +714,32 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
             return;
         }
 
-        elements.episodesList.innerHTML = episodes.map(ep => `
+        elements.episodesList.innerHTML = episodes.map(ep => {
+            const runtimeText = formatRuntime(ep.runtime_minutes);
+            return `
             <div class="episode-card" data-id="${ep.id}" data-name="${escapeHtml(state.currentSeries.name)} - S${ep.season_number || 1}E${ep.episode_number || 1}: ${escapeHtml(ep.name)}" data-tag="${ep.image_tag || state.currentSeries.tag || ''}" data-type="Episode" data-runtime="${ep.runtime_minutes || ''}">
                 <div class="ep-num-box">
                     E${ep.episode_number || '1'}
                 </div>
                 <div class="ep-info">
                     <div class="ep-title">${escapeHtml(ep.name)}</div>
-                    <div class="ep-meta">${ep.runtime_minutes ? `${ep.runtime_minutes} mins` : ''} ${ep.overview ? `• ${escapeHtml(ep.overview.slice(0, 100))}...` : ''}</div>
+                    <div class="ep-meta">${runtimeText ? `${runtimeText}` : ''} ${ep.overview ? `• ${escapeHtml(ep.overview.slice(0, 120))}...` : ''}</div>
                 </div>
-                <button class="ep-action-btn">Schedule</button>
+                <div class="ep-actions-group">
+                    <button class="btn btn-sm btn-primary action-schedule-ep">📅 Schedule</button>
+                    <button class="btn btn-sm btn-secondary action-playlist-ep">➕ Playlist</button>
+                </div>
             </div>
-        `).join('');
+        `;}).join('');
 
         elements.episodesList.querySelectorAll('.episode-card').forEach(card => {
-            card.addEventListener('click', () => {
-                openScheduleModal(card.dataset);
+            card.querySelector('.action-schedule-ep').addEventListener('click', (e) => {
+                e.stopPropagation();
+                openScheduleModal({ ...card.dataset, target_type: 'media' });
+            });
+            card.querySelector('.action-playlist-ep').addEventListener('click', (e) => {
+                e.stopPropagation();
+                openAddToPlaylistModal(card.dataset);
             });
         });
 
@@ -553,37 +749,304 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
     }
 }
 
-// --- Schedule Modal & Timing ---
-function openScheduleModal(mediaData) {
-    state.selectedMedia = mediaData;
-    
-    // Render media card preview
-    elements.modalMediaCard.innerHTML = `
+// --- Playlists View Management ---
+async function loadPlaylists() {
+    elements.playlistDetailView.classList.add('hidden');
+    elements.playlistsMainContainer.classList.remove('hidden');
+    elements.playlistsGrid.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading playlists...</p></div>';
+
+    try {
+        const playlists = await api.getPlaylists();
+        state.playlists = playlists;
+        renderPlaylistsGrid(playlists);
+        updatePlaylistsCountBadge(playlists.length);
+    } catch (err) {
+        elements.playlistsGrid.innerHTML = `<p class="empty-state">Failed to load playlists: ${escapeHtml(err.message)}</p>`;
+    }
+}
+
+async function loadPlaylistsCount() {
+    try {
+        const playlists = await api.getPlaylists();
+        state.playlists = playlists;
+        updatePlaylistsCountBadge(playlists.length);
+    } catch (e) {}
+}
+
+function updatePlaylistsCountBadge(count) {
+    if (count > 0) {
+        elements.playlistsCountBadge.textContent = count;
+        elements.playlistsCountBadge.classList.remove('hidden');
+    } else {
+        elements.playlistsCountBadge.classList.add('hidden');
+    }
+}
+
+function renderPlaylistsGrid(playlists) {
+    if (!playlists || playlists.length === 0) {
+        elements.playlistsGrid.innerHTML = '';
+        elements.emptyPlaylistsState.classList.remove('hidden');
+        return;
+    }
+
+    elements.emptyPlaylistsState.classList.add('hidden');
+
+    elements.playlistsGrid.innerHTML = playlists.map(pl => {
+        const totalDuration = formatRuntime(pl.total_runtime_minutes) || '0m';
+        return `
+        <div class="playlist-card" data-id="${pl.id}">
+            <div class="playlist-card-header">
+                <div>
+                    <div class="playlist-card-title">${escapeHtml(pl.name)}</div>
+                </div>
+                <span class="playlist-card-icon">📑</span>
+            </div>
+            <p class="playlist-card-desc">${escapeHtml(pl.description || 'No description.')}</p>
+            <div class="playlist-card-meta">
+                <span class="playlist-meta-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
+                <span>⏱️ ${totalDuration}</span>
+            </div>
+        </div>
+    `;}).join('');
+
+    elements.playlistsGrid.querySelectorAll('.playlist-card').forEach(card => {
+        card.addEventListener('click', () => openPlaylistDetail(card.dataset.id));
+    });
+}
+
+async function openPlaylistDetail(playlistId) {
+    elements.playlistsMainContainer.classList.add('hidden');
+    elements.playlistDetailView.classList.remove('hidden');
+    elements.playlistHero.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading playlist...</p></div>';
+    elements.playlistItemsList.innerHTML = '';
+
+    try {
+        const pl = await api.getPlaylist(playlistId);
+        state.currentPlaylist = pl;
+
+        const totalDuration = formatRuntime(pl.total_runtime_minutes) || '0m';
+
+        elements.playlistHero.innerHTML = `
+            <h2>${escapeHtml(pl.name)}</h2>
+            <p>${escapeHtml(pl.description || 'No description.')}</p>
+            <div class="playlist-hero-stats">
+                <span class="playlist-hero-stat-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
+                <span class="playlist-hero-stat-badge">⏱️ Total Runtime: ${totalDuration}</span>
+            </div>
+        `;
+
+        renderPlaylistItemsList(pl.items);
+
+    } catch (err) {
+        showToast(err.message, 'error');
+        elements.playlistHero.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+    }
+}
+
+function renderPlaylistItemsList(items) {
+    if (!items || items.length === 0) {
+        elements.playlistItemsList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h3>Playlist is Empty</h3>
+                <p>Browse your library and click "Add to Playlist" on any movie or episode.</p>
+            </div>
+        `;
+        return;
+    }
+
+    elements.playlistItemsList.innerHTML = items.map((item, idx) => {
+        const itemRuntime = formatRuntime(item.runtime_minutes);
+        return `
+        <div class="playlist-item-row" data-id="${item.id}" data-idx="${idx}">
+            <div class="playlist-item-order">${idx + 1}</div>
+            ${item.image_tag 
+                ? `<img class="playlist-item-poster" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
+                : `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? '🎬' : '📺'}</div>`}
+            <div class="playlist-item-info">
+                <div class="playlist-item-title">${escapeHtml(item.name)}</div>
+                <div class="playlist-item-meta">${item.item_type || 'Media'} ${itemRuntime ? `• ${itemRuntime}` : ''}</div>
+            </div>
+            <div class="playlist-item-controls">
+                <button class="btn-icon-subtle move-up" title="Move Up" ${idx === 0 ? 'disabled' : ''}>▲</button>
+                <button class="btn-icon-subtle move-down" title="Move Down" ${idx === items.length - 1 ? 'disabled' : ''}>▼</button>
+                <button class="btn-icon-subtle delete" title="Remove from playlist">✕</button>
+            </div>
+        </div>
+    `;}).join('');
+
+    // Attach row listeners
+    elements.playlistItemsList.querySelectorAll('.playlist-item-row').forEach(row => {
+        const itemId = row.dataset.id;
+        const idx = parseInt(row.dataset.idx, 10);
+
+        row.querySelector('.move-up')?.addEventListener('click', async () => {
+            if (idx <= 0) return;
+            const itemsCopy = [...state.currentPlaylist.items];
+            [itemsCopy[idx - 1], itemsCopy[idx]] = [itemsCopy[idx], itemsCopy[idx - 1]];
+            const newOrderIds = itemsCopy.map(x => x.id);
+            try {
+                const updatedPl = await api.reorderPlaylist(state.currentPlaylist.id, newOrderIds);
+                state.currentPlaylist = updatedPl;
+                renderPlaylistItemsList(updatedPl.items);
+            } catch (e) {
+                showToast('Failed to reorder', 'error');
+            }
+        });
+
+        row.querySelector('.move-down')?.addEventListener('click', async () => {
+            if (idx >= state.currentPlaylist.items.length - 1) return;
+            const itemsCopy = [...state.currentPlaylist.items];
+            [itemsCopy[idx], itemsCopy[idx + 1]] = [itemsCopy[idx + 1], itemsCopy[idx]];
+            const newOrderIds = itemsCopy.map(x => x.id);
+            try {
+                const updatedPl = await api.reorderPlaylist(state.currentPlaylist.id, newOrderIds);
+                state.currentPlaylist = updatedPl;
+                renderPlaylistItemsList(updatedPl.items);
+            } catch (e) {
+                showToast('Failed to reorder', 'error');
+            }
+        });
+
+        row.querySelector('.delete')?.addEventListener('click', async () => {
+            try {
+                const updatedPl = await api.removeItemFromPlaylist(state.currentPlaylist.id, itemId);
+                state.currentPlaylist = updatedPl;
+                openPlaylistDetail(state.currentPlaylist.id);
+                showToast('Item removed from playlist', 'success');
+            } catch (e) {
+                showToast('Failed to remove item', 'error');
+            }
+        });
+    });
+}
+
+// --- Add To Playlist Modal ---
+async function openAddToPlaylistModal(mediaData) {
+    state.targetForPlaylist = mediaData;
+    const runtimeFormatted = formatRuntime(mediaData.runtime);
+
+    elements.addToPlaylistMediaCard.innerHTML = `
         ${mediaData.tag 
             ? `<img class="modal-media-poster" src="${getImageUrl(mediaData.id, mediaData.tag)}" alt="${escapeHtml(mediaData.name)}">` 
             : ''}
         <div class="modal-media-info">
             <h4>${escapeHtml(mediaData.name)}</h4>
-            <p>${mediaData.type || 'Media'} ${mediaData.runtime ? `• ${mediaData.runtime}m` : ''}</p>
+            <p>${mediaData.type || 'Media'} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
         </div>
     `;
 
-    // Default time: next rounded 30 min or 1 hr
+    elements.newPlaylistInlineName.value = '';
+
+    try {
+        const playlists = await api.getPlaylists();
+        state.playlists = playlists;
+        if (playlists.length > 0) {
+            elements.targetPlaylistSelect.innerHTML = playlists.map(p => `
+                <option value="${p.id}">${escapeHtml(p.name)} (${p.items_count} items)</option>
+            `).join('');
+            elements.targetPlaylistSelect.disabled = false;
+        } else {
+            elements.targetPlaylistSelect.innerHTML = '<option value="">-- No playlists created yet --</option>';
+            elements.targetPlaylistSelect.disabled = true;
+        }
+    } catch (e) {
+        elements.targetPlaylistSelect.innerHTML = '<option value="">Failed to load playlists</option>';
+    }
+
+    elements.addToPlaylistModal.classList.remove('hidden');
+}
+
+async function handleConfirmAddToPlaylist() {
+    const itemData = {
+        jellyfin_item_id: state.targetForPlaylist.id,
+        name: state.targetForPlaylist.name,
+        item_type: state.targetForPlaylist.type || 'Movie',
+        image_tag: state.targetForPlaylist.tag || null,
+        runtime_minutes: parseInt(state.targetForPlaylist.runtime) || null,
+    };
+
+    const newName = elements.newPlaylistInlineName.value.trim();
+    let targetPlaylistId = elements.targetPlaylistSelect.value;
+
+    elements.confirmAddToPlaylistBtn.disabled = true;
+    elements.confirmAddToPlaylistBtn.textContent = 'Adding...';
+
+    try {
+        if (newName) {
+            const newPl = await api.createPlaylist({ name: newName });
+            targetPlaylistId = newPl.id;
+        }
+
+        if (!targetPlaylistId) {
+            throw new Error('Please select a playlist or enter a new playlist name');
+        }
+
+        await api.addItemToPlaylist(targetPlaylistId, itemData);
+        showToast('Added to playlist successfully!', 'success');
+        elements.addToPlaylistModal.classList.add('hidden');
+        loadPlaylistsCount();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        elements.confirmAddToPlaylistBtn.disabled = false;
+        elements.confirmAddToPlaylistBtn.textContent = 'Add to Playlist';
+    }
+}
+
+// --- Schedule Modal & Timing ---
+function openScheduleModal(targetData) {
+    state.selectedMedia = targetData;
+    const isPlaylist = targetData.target_type === 'playlist';
+    const runtimeFormatted = formatRuntime(targetData.runtime || targetData.total_runtime_minutes);
+
+    elements.modalMediaCard.innerHTML = `
+        ${targetData.tag 
+            ? `<img class="modal-media-poster" src="${getImageUrl(targetData.id, targetData.tag)}" alt="${escapeHtml(targetData.name)}">` 
+            : `<div class="modal-media-fallback">${isPlaylist ? '📑' : '🎬'}</div>`}
+        <div class="modal-media-info">
+            <h4>${escapeHtml(targetData.name)}</h4>
+            <p>${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
+        </div>
+    `;
+
+    // Reset recurrence to 'once'
+    setRecurrenceFrequency('once');
+
     const defaultTime = new Date();
     defaultTime.setMinutes(defaultTime.getMinutes() + 15);
     elements.scheduleDatetime.value = toLocalDatetimeString(defaultTime);
+    elements.scheduleTimeOfDay.value = '20:00';
+    elements.scheduleAutoTurnOff.checked = true;
 
     elements.scheduleModal.classList.remove('hidden');
+}
+
+function setRecurrenceFrequency(freq) {
+    elements.recurrenceToggleGroup.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.freq === freq);
+    });
+
+    if (freq === 'once') {
+        elements.timingOnceSection.classList.remove('hidden');
+        elements.timingRecurringSection.classList.add('hidden');
+    } else {
+        elements.timingOnceSection.classList.add('hidden');
+        elements.timingRecurringSection.classList.remove('hidden');
+
+        elements.weeklyDayGroup.classList.toggle('hidden', freq !== 'weekly');
+        elements.customDaysGroup.classList.toggle('hidden', freq !== 'custom_days');
+    }
 }
 
 function handlePresetClick(btn) {
     const now = new Date();
     if (btn.dataset.offset) {
-        const mins = parseInt(btn.dataset.offset);
+        const mins = parseInt(btn.dataset.offset, 10);
         now.setMinutes(now.getMinutes() + mins);
     } else if (btn.dataset.preset === 'tonight-20') {
         now.setHours(20, 0, 0, 0);
-        if (now < new Date()) now.setDate(now.getDate() + 1); // tomorrow 20:00 if past
+        if (now < new Date()) now.setDate(now.getDate() + 1);
     } else if (btn.dataset.preset === 'tonight-21') {
         now.setHours(21, 30, 0, 0);
         if (now < new Date()) now.setDate(now.getDate() + 1);
@@ -593,31 +1056,58 @@ function handlePresetClick(btn) {
 
 async function handleConfirmSchedule() {
     if (!state.selectedMedia) return;
-    const timeValue = elements.scheduleDatetime.value;
-    if (!timeValue) {
-        showToast('Please select a date and time', 'warning');
-        return;
+
+    const activeFreqBtn = elements.recurrenceToggleGroup.querySelector('.toggle-btn.active');
+    const scheduleType = activeFreqBtn ? activeFreqBtn.dataset.freq : 'once';
+    const isPlaylist = state.selectedMedia.target_type === 'playlist';
+    const autoTurnOff = elements.scheduleAutoTurnOff.checked;
+
+    let scheduledTime = null;
+    let daysOfWeek = null;
+    let timeOfDay = null;
+
+    if (scheduleType === 'once') {
+        const dtVal = elements.scheduleDatetime.value;
+        if (!dtVal) {
+            showToast('Please pick a date and time for playback', 'error');
+            return;
+        }
+        scheduledTime = new Date(dtVal).toISOString();
+    } else {
+        timeOfDay = elements.scheduleTimeOfDay.value || '20:00';
+        if (scheduleType === 'weekly') {
+            daysOfWeek = elements.scheduleWeeklyDay.value || 'fri';
+        } else if (scheduleType === 'custom_days') {
+            const checkedDays = Array.from(elements.customDaysGroup.querySelectorAll('input:checked')).map(i => i.value);
+            if (checkedDays.length === 0) {
+                showToast('Please select at least one day of the week', 'error');
+                return;
+            }
+            daysOfWeek = checkedDays.join(',');
+        }
     }
 
     elements.confirmScheduleBtn.disabled = true;
     elements.confirmScheduleBtn.textContent = 'Scheduling...';
 
-    try {
-        const scheduledTimeUtc = new Date(timeValue).toISOString();
-        await api.createSchedule({
-            name: state.selectedMedia.name,
-            jellyfin_item_id: state.selectedMedia.id,
-            item_type: state.selectedMedia.type || 'movie',
-            image_tag: state.selectedMedia.tag || null,
-            scheduled_time: scheduledTimeUtc,
-        });
+    const payload = {
+        name: state.selectedMedia.name,
+        target_type: isPlaylist ? 'playlist' : 'media',
+        jellyfin_item_id: state.selectedMedia.id,
+        item_type: isPlaylist ? 'Playlist' : (state.selectedMedia.type || 'Movie'),
+        image_tag: state.selectedMedia.tag || null,
+        scheduled_time: scheduledTime,
+        schedule_type: scheduleType,
+        days_of_week: daysOfWeek,
+        time_of_day: timeOfDay,
+        auto_turn_off: autoTurnOff,
+    };
 
-        showToast(`Scheduled "${state.selectedMedia.name}" successfully!`, 'success');
+    try {
+        await api.createSchedule(payload);
+        showToast('Playback job scheduled successfully!', 'success');
         elements.scheduleModal.classList.add('hidden');
-        
-        // Switch to timeline view to show the new job
         switchView('timeline');
-        loadTimeline();
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
@@ -628,13 +1118,19 @@ async function handleConfirmSchedule() {
 
 async function handleInstantPlay() {
     if (!state.selectedMedia) return;
-    
+    const isPlaylist = state.selectedMedia.target_type === 'playlist';
+    const autoTurnOff = elements.scheduleAutoTurnOff.checked;
+
     elements.instantPlayBtn.disabled = true;
-    elements.instantPlayBtn.textContent = '⚡ Sending to TV...';
+    elements.instantPlayBtn.textContent = 'Starting...';
 
     try {
-        const res = await api.playNow(state.selectedMedia.id);
-        showToast(res.message || `Started playing on TV!`, 'success');
+        if (isPlaylist) {
+            await api.playPlaylistNow(state.selectedMedia.id);
+        } else {
+            await api.playNow([state.selectedMedia.id], autoTurnOff);
+        }
+        showToast('Playback started on TV!', 'success');
         elements.scheduleModal.classList.add('hidden');
     } catch (err) {
         showToast(err.message, 'error');
@@ -644,11 +1140,14 @@ async function handleInstantPlay() {
     }
 }
 
-// --- Timeline View ---
+// --- Timeline Rendering ---
 async function loadTimeline() {
+    elements.timelineList.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading scheduled jobs...</p></div>';
+
     try {
         const jobs = await api.getSchedules();
         state.scheduledJobs = jobs;
+        renderTimeline(jobs);
         
         const pendingCount = jobs.filter(j => j.status === 'pending').length;
         if (pendingCount > 0) {
@@ -657,10 +1156,8 @@ async function loadTimeline() {
         } else {
             elements.pendingCountBadge.classList.add('hidden');
         }
-
-        renderTimeline(jobs);
     } catch (err) {
-        console.warn('Failed to load timeline:', err);
+        elements.timelineList.innerHTML = `<p class="empty-state">Failed to load schedule: ${escapeHtml(err.message)}</p>`;
     }
 }
 
@@ -672,59 +1169,81 @@ function renderTimeline(jobs) {
     }
 
     elements.emptyTimelineState.classList.add('hidden');
-    elements.timelineList.innerHTML = jobs.map(job => `
-        <div class="timeline-card" data-job-id="${job.id}">
-            <div class="timeline-main">
+
+    elements.timelineList.innerHTML = jobs.map(job => {
+        let scheduleLabel = '';
+        if (job.schedule_type === 'daily') {
+            scheduleLabel = `🔄 Daily at ${job.time_of_day || '20:00'}`;
+        } else if (job.schedule_type === 'weekly') {
+            scheduleLabel = `🔄 Weekly (${(job.days_of_week || 'fri').toUpperCase()}) at ${job.time_of_day || '20:00'}`;
+        } else if (job.schedule_type === 'custom_days') {
+            scheduleLabel = `🔄 Days: ${(job.days_of_week || '').toUpperCase()} at ${job.time_of_day || '20:00'}`;
+        } else {
+            scheduleLabel = `📅 ${formatDateTime(job.scheduled_time)}`;
+        }
+
+        const isPlaylist = job.target_type === 'playlist' || job.item_type === 'Playlist';
+
+        return `
+        <div class="timeline-card ${job.status}" data-id="${job.id}">
+            <div class="timeline-poster">
                 ${job.image_tag 
-                    ? `<img class="timeline-poster" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">` 
-                    : `<div class="timeline-poster" style="background:var(--bg-surface);display:flex;align-items:center;justify-content:center;">📺</div>`}
-                <div class="timeline-info">
-                    <div class="timeline-title">${escapeHtml(job.name)}</div>
-                    <div class="timeline-time">⏰ ${formatDatetime(job.scheduled_time)}</div>
-                </div>
+                    ? `<img src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">` 
+                    : `<div class="timeline-fallback">${isPlaylist ? '📑' : '🎬'}</div>`}
             </div>
+            
+            <div class="timeline-details">
+                <div class="timeline-header">
+                    <h4>${escapeHtml(job.name)}</h4>
+                    <span class="status-badge ${job.status}">${job.status}</span>
+                </div>
+                <div class="timeline-meta">
+                    <span class="schedule-time-badge">${scheduleLabel}</span>
+                    <span class="type-pill">${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
+                    ${job.auto_turn_off ? `<span class="type-pill" title="Auto-turn off TV after playback">🌙 Auto-sleep</span>` : ''}
+                </div>
+                ${job.error_message ? `<div class="timeline-error">⚠️ ${escapeHtml(job.error_message)}</div>` : ''}
+            </div>
+
             <div class="timeline-actions">
-                <span class="status-badge ${job.status}">${job.status}</span>
-                ${job.status === 'pending' ? `<button class="btn btn-danger btn-sm cancel-job-btn" data-job-id="${job.id}">Cancel</button>` : ''}
+                <button class="btn btn-sm btn-danger cancel-job-btn" data-id="${job.id}">
+                    ${job.status === 'pending' ? 'Cancel' : 'Delete'}
+                </button>
             </div>
         </div>
-    `).join('');
+    `;}).join('');
 
     elements.timelineList.querySelectorAll('.cancel-job-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (confirm('Cancel this scheduled playback job?')) {
-                try {
-                    await api.deleteSchedule(btn.dataset.jobId);
-                    showToast('Scheduled playback cancelled', 'success');
-                    loadTimeline();
-                } catch (err) {
-                    showToast(err.message, 'error');
-                }
+        btn.addEventListener('click', async () => {
+            const jobId = btn.dataset.id;
+            try {
+                await api.deleteSchedule(jobId);
+                showToast('Job removed', 'success');
+                loadTimeline();
+            } catch (err) {
+                showToast(err.message, 'error');
             }
         });
     });
 }
 
-// --- Settings & TV Setup Actions ---
+// --- Settings Modals & Handlers ---
 function openSettingsModal(tabName = 'tv-tab') {
     elements.settingsModal.classList.remove('hidden');
     switchSettingsTab(tabName);
-    updateTvStatusUI();
 }
 
-function switchSettingsTab(tabId) {
-    elements.settingsTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
-    elements.settingsPanels.forEach(p => p.classList.toggle('active', p.id === tabId));
+function switchSettingsTab(tabName) {
+    elements.settingsTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
+    elements.settingsPanels.forEach(panel => panel.classList.toggle('active', panel.id === tabName));
 }
 
 async function handleConnectTv() {
     const ip = elements.tvIpInput.value.trim();
     const port = elements.tvPortInput.value.trim();
-    const name = elements.tvNameInput.value.trim();
 
     if (!ip) {
-        showToast('Please enter your TV IP address', 'warning');
+        showToast('Please enter your TV IP address', 'error');
         return;
     }
 
@@ -732,21 +1251,15 @@ async function handleConnectTv() {
     elements.connectTvBtn.textContent = 'Connecting...';
 
     try {
-        // Save name and IP first
-        await api.saveSettings({ tv_ip: ip, adb_port: parseInt(port) || 5555, tv_device_name: name });
-        
-        // Trigger ADB connection
         const res = await api.connectAdb(ip, port);
         renderAdbStatusBox(res);
-        
-        if (res.state === 'device') {
+        if (res.is_ready) {
             showToast('TV Connected & Authorized!', 'success');
         } else if (res.state === 'unauthorized') {
-            showToast('Prompt on TV screen! Check TV and press Allow.', 'warning');
+            showToast('Prompt sent to TV screen — please allow USB debugging on your TV', 'warning');
         } else {
-            showToast(res.message, 'error');
+            showToast(res.message || 'Cannot reach TV', 'error');
         }
-        
         updateTvStatusUI();
     } catch (err) {
         showToast(err.message, 'error');
@@ -758,11 +1271,15 @@ async function handleConnectTv() {
 
 async function handleSaveTvSettings() {
     const ip = elements.tvIpInput.value.trim();
-    const port = parseInt(elements.tvPortInput.value.trim()) || 5555;
+    const port = parseInt(elements.tvPortInput.value) || 5555;
     const name = elements.tvNameInput.value.trim();
 
     try {
-        await api.saveSettings({ tv_ip: ip, adb_port: port, tv_device_name: name });
+        await api.saveSettings({
+            tv_ip: ip,
+            adb_port: port,
+            tv_device_name: name,
+        });
         showToast('TV settings saved', 'success');
         updateTvStatusUI();
     } catch (err) {
@@ -771,37 +1288,35 @@ async function handleSaveTvSettings() {
 }
 
 async function handleTestWake() {
-    elements.testWakeBtn.disabled = true;
     try {
-        await api.testWake();
-        showToast('Wake signal sent to TV!', 'success');
+        const res = await api.testWake();
+        showToast(res.message || 'Screen wake command sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
-    } finally {
-        elements.testWakeBtn.disabled = false;
+    }
+}
+
+async function handleTestSleep() {
+    try {
+        const res = await api.testSleep();
+        showToast(res.message || 'Sleep command sent to TV', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 
 async function handleTestLaunchApp() {
-    elements.testLaunchAppBtn.disabled = true;
     try {
-        await api.testLaunch();
-        showToast('Jellyfin app launched on TV!', 'success');
+        const res = await api.testLaunch();
+        showToast(res.message || 'Launch Jellyfin command sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
-    } finally {
-        elements.testLaunchAppBtn.disabled = false;
     }
 }
 
 async function handleTestJellyfin() {
     const url = elements.jfUrlInput.value.trim();
     const apiKey = elements.jfKeyInput.value.trim();
-
-    if (!url || !apiKey) {
-        showToast('Please enter both Jellyfin URL and API Key', 'warning');
-        return;
-    }
 
     elements.testJfBtn.disabled = true;
     elements.testJfBtn.textContent = 'Testing...';
@@ -849,26 +1364,19 @@ function switchView(viewName) {
     state.activeView = viewName;
     elements.viewTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === viewName));
     elements.browserView.classList.toggle('active', viewName === 'browser');
+    elements.playlistsView.classList.toggle('active', viewName === 'playlists');
     elements.timelineView.classList.toggle('active', viewName === 'timeline');
 
-    if (viewName === 'timeline') {
+    if (viewName === 'playlists') {
+        loadPlaylists();
+    } else if (viewName === 'timeline') {
         loadTimeline();
     }
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-// --- Setup Event Listeners ---
+// --- Event Listeners Setup ---
 function setupEventListeners() {
-    // View switching
+    // View navigation
     elements.viewTabs.forEach(tab => {
         tab.addEventListener('click', () => switchView(tab.dataset.view));
     });
@@ -879,15 +1387,22 @@ function setupEventListeners() {
     elements.bannerActionBtn.addEventListener('click', () => openSettingsModal('tv-tab'));
     elements.goToLibraryBtn.addEventListener('click', () => switchView('browser'));
 
-    // Search & Filter
-    elements.searchInput.addEventListener('input', (e) => {
-        const val = e.target.value;
+    // Fast Responsive Search (No Enter key needed)
+    const onSearchInput = debounce(() => {
+        const val = elements.searchInput.value.trim();
         elements.clearSearchBtn.classList.toggle('hidden', !val);
-        clearTimeout(state.searchDebounceTimer);
-        state.searchDebounceTimer = setTimeout(() => {
-            state.searchQuery = val;
+        state.searchQuery = val;
+        loadLibraryMedia();
+    }, 150);
+
+    elements.searchInput.addEventListener('input', onSearchInput);
+    elements.searchInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Escape') {
+            elements.searchInput.value = '';
+            elements.clearSearchBtn.classList.add('hidden');
+            state.searchQuery = '';
             loadLibraryMedia();
-        }, 300);
+        }
     });
 
     elements.clearSearchBtn.addEventListener('click', () => {
@@ -897,6 +1412,7 @@ function setupEventListeners() {
         loadLibraryMedia();
     });
 
+    // Category / Type Chips
     elements.filterChips.forEach(chip => {
         chip.addEventListener('click', () => {
             elements.filterChips.forEach(c => c.classList.remove('active'));
@@ -913,8 +1429,115 @@ function setupEventListeners() {
         loadLibraryMedia();
     });
 
-    // Schedule Modal
+    // Playlists View buttons
+    elements.openCreatePlaylistBtn.addEventListener('click', () => {
+        elements.playlistFormModalTitle.textContent = 'New Playlist';
+        elements.playlistNameInput.value = '';
+        elements.playlistDescInput.value = '';
+        state.currentPlaylist = null;
+        elements.playlistFormModal.classList.remove('hidden');
+    });
+
+    elements.createFirstPlaylistBtn?.addEventListener('click', () => {
+        elements.playlistFormModalTitle.textContent = 'New Playlist';
+        elements.playlistNameInput.value = '';
+        elements.playlistDescInput.value = '';
+        state.currentPlaylist = null;
+        elements.playlistFormModal.classList.remove('hidden');
+    });
+
+    elements.backToPlaylistsBtn.addEventListener('click', () => {
+        elements.playlistDetailView.classList.add('hidden');
+        elements.playlistsMainContainer.classList.remove('hidden');
+        loadPlaylists();
+    });
+
+    elements.editPlaylistInfoBtn.addEventListener('click', () => {
+        if (!state.currentPlaylist) return;
+        elements.playlistFormModalTitle.textContent = 'Edit Playlist';
+        elements.playlistNameInput.value = state.currentPlaylist.name || '';
+        elements.playlistDescInput.value = state.currentPlaylist.description || '';
+        elements.playlistFormModal.classList.remove('hidden');
+    });
+
+    elements.deletePlaylistBtn.addEventListener('click', async () => {
+        if (!state.currentPlaylist) return;
+        if (confirm(`Are you sure you want to delete playlist "${state.currentPlaylist.name}"?`)) {
+            try {
+                await api.deletePlaylist(state.currentPlaylist.id);
+                showToast('Playlist deleted', 'success');
+                elements.playlistDetailView.classList.add('hidden');
+                elements.playlistsMainContainer.classList.remove('hidden');
+                loadPlaylists();
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        }
+    });
+
+    elements.playPlaylistNowBtn.addEventListener('click', async () => {
+        if (!state.currentPlaylist) return;
+        elements.playPlaylistNowBtn.disabled = true;
+        elements.playPlaylistNowBtn.textContent = 'Starting Playback...';
+        try {
+            await api.playPlaylistNow(state.currentPlaylist.id);
+            showToast(`Playing playlist "${state.currentPlaylist.name}" on TV!`, 'success');
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            elements.playPlaylistNowBtn.disabled = false;
+            elements.playPlaylistNowBtn.textContent = '⚡ Play on TV Now';
+        }
+    });
+
+    elements.schedulePlaylistBtn.addEventListener('click', () => {
+        if (!state.currentPlaylist) return;
+        openScheduleModal({
+            id: state.currentPlaylist.id,
+            name: state.currentPlaylist.name,
+            total_runtime_minutes: state.currentPlaylist.total_runtime_minutes,
+            target_type: 'playlist',
+        });
+    });
+
+    // Create / Edit Playlist Modal handlers
+    elements.closePlaylistFormModal.addEventListener('click', () => elements.playlistFormModal.classList.add('hidden'));
+    elements.cancelPlaylistFormBtn.addEventListener('click', () => elements.playlistFormModal.classList.add('hidden'));
+    elements.savePlaylistFormBtn.addEventListener('click', async () => {
+        const name = elements.playlistNameInput.value.trim();
+        const desc = elements.playlistDescInput.value.trim();
+        if (!name) {
+            showToast('Please enter a playlist name', 'error');
+            return;
+        }
+
+        try {
+            if (state.currentPlaylist) {
+                const updated = await api.updatePlaylist(state.currentPlaylist.id, { name, description: desc });
+                state.currentPlaylist = updated;
+                openPlaylistDetail(updated.id);
+                showToast('Playlist updated', 'success');
+            } else {
+                await api.createPlaylist({ name, description: desc });
+                showToast('Playlist created', 'success');
+                loadPlaylists();
+            }
+            elements.playlistFormModal.classList.add('hidden');
+        } catch (e) {
+            showToast(e.message, 'error');
+        }
+    });
+
+    // Add To Playlist Modal handlers
+    elements.closeAddToPlaylistModal.addEventListener('click', () => elements.addToPlaylistModal.classList.add('hidden'));
+    elements.cancelAddToPlaylistBtn.addEventListener('click', () => elements.addToPlaylistModal.classList.add('hidden'));
+    elements.confirmAddToPlaylistBtn.addEventListener('click', handleConfirmAddToPlaylist);
+
+    // Schedule Modal handlers
     elements.closeScheduleModal.addEventListener('click', () => elements.scheduleModal.classList.add('hidden'));
+    elements.recurrenceToggleGroup.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => setRecurrenceFrequency(btn.dataset.freq));
+    });
     elements.presetButtons.forEach(btn => btn.addEventListener('click', () => handlePresetClick(btn)));
     elements.confirmScheduleBtn.addEventListener('click', handleConfirmSchedule);
     elements.instantPlayBtn.addEventListener('click', handleInstantPlay);
@@ -922,7 +1545,7 @@ function setupEventListeners() {
     // Timeline Refresh
     elements.refreshTimelineBtn.addEventListener('click', loadTimeline);
 
-    // Settings Modal
+    // Settings Modal handlers
     elements.closeSettingsModal.addEventListener('click', () => elements.settingsModal.classList.add('hidden'));
     elements.settingsTabs.forEach(tab => {
         tab.addEventListener('click', () => switchSettingsTab(tab.dataset.tab));
@@ -934,6 +1557,7 @@ function setupEventListeners() {
     elements.verifyAuthBtn.addEventListener('click', handleConnectTv);
     elements.refreshAdbStatusBtn.addEventListener('click', updateTvStatusUI);
     elements.testWakeBtn.addEventListener('click', handleTestWake);
+    elements.testSleepBtn.addEventListener('click', handleTestSleep);
     elements.testLaunchAppBtn.addEventListener('click', handleTestLaunchApp);
 
     // Jellyfin Setup Buttons
@@ -941,5 +1565,5 @@ function setupEventListeners() {
     elements.saveJfSettingsBtn.addEventListener('click', handleSaveJfSettings);
 }
 
-// Start application
+// Start application on DOM ready
 document.addEventListener('DOMContentLoaded', initApp);

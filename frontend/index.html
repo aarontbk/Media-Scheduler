@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Media Scheduler - Shabbat & TV Automation</title>
+    <title>Media Scheduler</title>
     <link rel="icon" type="image/png" href="/static/logo.png">
     <link rel="shortcut icon" type="image/png" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/static/logo.png">
@@ -48,10 +48,14 @@
     <!-- Main Content Container -->
     <main class="app-main">
         
-        <!-- Navigation Tabs: Browse / Timeline -->
+        <!-- Navigation Tabs: Browse / Playlists / Timeline -->
         <nav class="view-nav">
             <button class="view-tab active" data-view="browser">
                 <span>🎬</span> Library & Search
+            </button>
+            <button class="view-tab" data-view="playlists">
+                <span>📑</span> Playlists
+                <span class="tab-badge hidden" id="playlistsCountBadge">0</span>
             </button>
             <button class="view-tab" data-view="timeline">
                 <span>⏱️</span> Scheduled Jobs
@@ -74,7 +78,7 @@
                     <button class="chip active" data-type="Movie,Series" data-category="">All</button>
                     <button class="chip" data-type="Series" data-category="">TV Shows</button>
                     <button class="chip" data-type="Movie" data-category="">Movies</button>
-                    <button class="chip" data-type="Movie,Series" data-category="anime">🌸 Anime</button>
+                    <button class="chip" data-type="Movie,Series" data-category="anime">Anime</button>
                     <button class="chip-refresh" id="refreshMediaBtn" title="Reload library">↻</button>
                 </div>
             </div>
@@ -109,14 +113,66 @@
             </div>
         </section>
 
-        <!-- VIEW 2: Schedule Timeline -->
+        <!-- VIEW 2: Playlists View -->
+        <section class="view-section" id="playlistsView">
+            <!-- Playlists Main List -->
+            <div id="playlistsMainContainer">
+                <div class="section-title-row">
+                    <div>
+                        <h2>Custom Playlists</h2>
+                        <p class="section-subtitle">Chain multiple movies or episodes into a playlist to play or schedule together.</p>
+                    </div>
+                    <button class="btn btn-primary" id="openCreatePlaylistBtn">➕ New Playlist</button>
+                </div>
+
+                <div class="playlists-grid" id="playlistsGrid">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <div class="empty-state hidden" id="emptyPlaylistsState">
+                    <div class="empty-icon">📑</div>
+                    <h3>No Playlists Yet</h3>
+                    <p>Create a playlist or click "Add to Playlist" on any media item in your library.</p>
+                    <button class="btn btn-primary" id="createFirstPlaylistBtn">➕ Create First Playlist</button>
+                </div>
+            </div>
+
+            <!-- Playlist Detail / Items View (hidden by default) -->
+            <div class="playlist-detail-view hidden" id="playlistDetailView">
+                <div class="drilldown-header">
+                    <button class="back-btn" id="backToPlaylistsBtn">
+                        <span>←</span> Back to Playlists
+                    </button>
+                    <div class="playlist-detail-actions">
+                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" id="deletePlaylistBtn">🗑️ Delete</button>
+                    </div>
+                </div>
+
+                <div class="playlist-hero" id="playlistHero">
+                    <!-- Title, Description, Total Duration -->
+                </div>
+
+                <div class="playlist-action-bar">
+                    <button class="btn btn-secondary" id="playPlaylistNowBtn">⚡ Play on TV Now</button>
+                    <button class="btn btn-primary" id="schedulePlaylistBtn">📅 Schedule Playlist</button>
+                </div>
+
+                <div class="playlist-items-list" id="playlistItemsList">
+                    <!-- Items in order with move up / move down / remove -->
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 3: Schedule Timeline -->
         <section class="view-section" id="timelineView">
             <div class="section-title-row">
-                <h2>Scheduled Playback Timeline</h2>
+                <div>
+                    <h2>Scheduled Playback Timeline</h2>
+                    <p class="section-subtitle">Automated TV wake-up and playback execution with auto-sleep on finish.</p>
+                </div>
                 <button class="btn btn-secondary btn-sm" id="refreshTimelineBtn">↻ Refresh</button>
             </div>
-            
-            <p class="section-subtitle">Playback triggers automatically at the scheduled time with automatic TV wake-up.</p>
 
             <div class="timeline-list" id="timelineList">
                 <!-- Timeline items -->
@@ -125,7 +181,7 @@
             <div class="empty-state hidden" id="emptyTimelineState">
                 <div class="empty-icon">📅</div>
                 <h3>No Scheduled Playback</h3>
-                <p>Select a movie or TV show episode from the Library to set up automatic playback.</p>
+                <p>Select a movie, episode, or playlist to set up automatic playback.</p>
                 <button class="btn btn-primary" id="goToLibraryBtn">Browse Library</button>
             </div>
         </section>
@@ -140,14 +196,25 @@
             </div>
 
             <div class="modal-body">
-                <!-- Selected Media Summary -->
+                <!-- Selected Target Summary -->
                 <div class="selected-media-card" id="modalMediaCard">
                     <!-- Populated dynamically -->
                 </div>
 
-                <!-- Timing Selection -->
+                <!-- Recurrence Selector -->
                 <div class="form-section">
-                    <label class="form-label" for="scheduleDatetime">Select Playback Time</label>
+                    <label class="form-label">Schedule Frequency</label>
+                    <div class="recurrence-toggle-group" id="recurrenceToggleGroup">
+                        <button class="toggle-btn active" data-freq="once">Once</button>
+                        <button class="toggle-btn" data-freq="daily">Daily</button>
+                        <button class="toggle-btn" data-freq="weekly">Weekly</button>
+                        <button class="toggle-btn" data-freq="custom_days">Specific Days</button>
+                    </div>
+                </div>
+
+                <!-- Timing Section: Once -->
+                <div class="form-section" id="timingOnceSection">
+                    <label class="form-label" for="scheduleDatetime">Select Date & Time</label>
                     <input type="datetime-local" class="form-input" id="scheduleDatetime">
                     
                     <div class="preset-times">
@@ -161,16 +228,121 @@
                     </div>
                 </div>
 
+                <!-- Timing Section: Daily / Weekly / Specific Days -->
+                <div class="form-section hidden" id="timingRecurringSection">
+                    
+                    <!-- Weekly Day Selector -->
+                    <div class="form-group hidden" id="weeklyDayGroup">
+                        <label class="form-label" for="scheduleWeeklyDay">Day of Week</label>
+                        <select class="form-input" id="scheduleWeeklyDay">
+                            <option value="mon">Monday</option>
+                            <option value="tue">Tuesday</option>
+                            <option value="wed">Wednesday</option>
+                            <option value="thu">Thursday</option>
+                            <option value="fri" selected>Friday (Shabbat)</option>
+                            <option value="sat">Saturday</option>
+                            <option value="sun">Sunday</option>
+                        </select>
+                    </div>
+
+                    <!-- Custom Days Selector (Pill Checkboxes) -->
+                    <div class="form-group hidden" id="customDaysGroup">
+                        <label class="form-label">Active Days</label>
+                        <div class="day-checkbox-pills">
+                            <label class="day-pill"><input type="checkbox" value="sun"><span>Sun</span></label>
+                            <label class="day-pill"><input type="checkbox" value="mon"><span>Mon</span></label>
+                            <label class="day-pill"><input type="checkbox" value="tue"><span>Tue</span></label>
+                            <label class="day-pill"><input type="checkbox" value="wed"><span>Wed</span></label>
+                            <label class="day-pill"><input type="checkbox" value="thu"><span>Thu</span></label>
+                            <label class="day-pill"><input type="checkbox" value="fri" checked><span>Fri</span></label>
+                            <label class="day-pill"><input type="checkbox" value="sat" checked><span>Sat</span></label>
+                        </div>
+                    </div>
+
+                    <!-- Recurring Time of Day -->
+                    <div class="form-group">
+                        <label class="form-label" for="scheduleTimeOfDay">Playback Time (HH:MM)</label>
+                        <input type="time" class="form-input" id="scheduleTimeOfDay" value="20:00">
+                    </div>
+                </div>
+
+                <!-- Auto Power Off Toggle -->
+                <div class="form-section checkbox-section">
+                    <label class="toggle-checkbox-label">
+                        <input type="checkbox" id="scheduleAutoTurnOff" checked>
+                        <span class="checkbox-custom"></span>
+                        <div class="checkbox-desc">
+                            <strong>Graceful TV Power-Off</strong>
+                            <p>Automatically monitor playback and put TV to sleep when movie or playlist finishes.</p>
+                        </div>
+                    </label>
+                </div>
+
                 <!-- Wake-up Notice -->
                 <div class="info-card">
                     <span class="info-icon">💡</span>
-                    <p>The scheduler will connect via ADB 30 seconds before start time to wake your TCL TV screen and launch Jellyfin.</p>
+                    <p>The scheduler connects via ADB 30 seconds before start time to wake the TV and launch Jellyfin.</p>
                 </div>
             </div>
 
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="instantPlayBtn">⚡ Play Now</button>
                 <button class="btn btn-primary" id="confirmScheduleBtn">📅 Schedule Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add to Playlist Modal -->
+    <div class="modal-overlay hidden" id="addToPlaylistModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>➕ Add to Playlist</h3>
+                <button class="modal-close-btn" id="closeAddToPlaylistModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="selected-media-card" id="addToPlaylistMediaCard"></div>
+                
+                <div class="form-section">
+                    <label class="form-label" for="targetPlaylistSelect">Choose Existing Playlist</label>
+                    <select class="form-input" id="targetPlaylistSelect">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div class="form-divider"><span>OR CREATE NEW</span></div>
+
+                <div class="form-section">
+                    <label class="form-label" for="newPlaylistInlineName">New Playlist Name</label>
+                    <input type="text" class="form-input" id="newPlaylistInlineName" placeholder="e.g. Weekend Anime" autocomplete="off">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelAddToPlaylistBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmAddToPlaylistBtn">Add to Playlist</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create / Edit Playlist Modal -->
+    <div class="modal-overlay hidden" id="playlistFormModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="playlistFormModalTitle">New Playlist</h3>
+                <button class="modal-close-btn" id="closePlaylistFormModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="playlistNameInput">Playlist Name</label>
+                    <input type="text" class="form-input" id="playlistNameInput" placeholder="e.g. Friday Shabbat Movies" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="playlistDescInput">Description (Optional)</label>
+                    <textarea class="form-input" id="playlistDescInput" rows="2" placeholder="e.g. Movies for Friday night dinner"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelPlaylistFormBtn">Cancel</button>
+                <button class="btn btn-primary" id="savePlaylistFormBtn">Save Playlist</button>
             </div>
         </div>
     </div>
@@ -205,7 +377,7 @@
                         </div>
                         <p class="status-box-msg" id="adbBoxMessage">Connecting to TV...</p>
 
-                        <!-- Special Action Area for 'unauthorized' / 'prompt on screen' state -->
+                        <!-- Action Area for 'unauthorized' prompt on screen -->
                         <div class="tv-prompt-callout hidden" id="tvPromptCallout">
                             <div class="prompt-icon">📺⚠️</div>
                             <div class="prompt-text">
@@ -242,12 +414,13 @@
                         <button class="btn btn-secondary" id="saveTvSettingsBtn">Save Settings</button>
                     </div>
 
-                    <!-- Test Actions (When TV is connected) -->
+                    <!-- Test Actions -->
                     <div class="test-actions-section">
                         <h4>Test TV Controls:</h4>
                         <div class="test-buttons-grid">
                             <button class="btn btn-secondary btn-sm" id="testWakeBtn">⚡ Test Screen Wake</button>
                             <button class="btn btn-secondary btn-sm" id="testLaunchAppBtn">🚀 Test Launch Jellyfin</button>
+                            <button class="btn btn-secondary btn-sm" id="testSleepBtn">🌙 Test Sleep / Power-Off</button>
                         </div>
                     </div>
 

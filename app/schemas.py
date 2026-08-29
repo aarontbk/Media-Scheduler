@@ -1,21 +1,76 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+# --- Playlists ---
+class PlaylistItemCreate(BaseModel):
+    jellyfin_item_id: str
+    name: str
+    item_type: str = "Movie"  # Movie, Episode
+    image_tag: str | None = None
+    runtime_minutes: int | None = None
+
+class PlaylistItemResponse(BaseModel):
+    id: str
+    playlist_id: str
+    jellyfin_item_id: str
+    name: str
+    item_type: str
+    image_tag: str | None
+    runtime_minutes: int | None
+    order: int
+    created_at: datetime
+    
+    model_config = {"from_attributes": True}
+
+class PlaylistCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+class PlaylistUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+class PlaylistResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    created_at: datetime
+    items_count: int = 0
+    total_runtime_minutes: int = 0
+    items: list[PlaylistItemResponse] = []
+    
+    model_config = {"from_attributes": True}
+
+class PlaylistReorderRequest(BaseModel):
+    item_ids: list[str]
+
 # --- Schedule ---
 class ScheduleCreate(BaseModel):
     name: str
-    jellyfin_item_id: str
-    item_type: str  # movie, episode
+    target_type: str = "media"  # "media" | "playlist"
+    jellyfin_item_id: str  # Jellyfin itemId or Playlist ID
+    item_type: str = "Movie"  # Movie, Episode, Series, Playlist
     image_tag: str | None = None
-    scheduled_time: datetime
+    scheduled_time: datetime | None = None  # Used for "once"
+    
+    # Recurrence configuration
+    schedule_type: str = "once"  # "once", "daily", "weekly", "custom_days"
+    days_of_week: str | None = None  # e.g. "fri,sat"
+    time_of_day: str | None = None  # e.g. "20:30"
+    auto_turn_off: bool = True  # Auto-turn off TV after playback finishes
 
 class ScheduleResponse(BaseModel):
     id: str
     name: str
+    target_type: str
     jellyfin_item_id: str
     item_type: str
     image_tag: str | None
     scheduled_time: datetime
+    schedule_type: str
+    days_of_week: str | None
+    time_of_day: str | None
+    auto_turn_off: bool
     status: str
     error_message: str | None
     created_at: datetime
@@ -121,3 +176,4 @@ class SettingsResponse(BaseModel):
 # --- Play Now ---
 class PlayNowRequest(BaseModel):
     item_ids: list[str]
+    auto_turn_off: bool = True

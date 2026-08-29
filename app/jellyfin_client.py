@@ -422,6 +422,36 @@ class JellyfinClient:
             logger.error(f"Error during play_on_session: {e}")
             return False
 
+    async def get_total_runtime_seconds(self, item_ids: list[str]) -> int:
+        """Calculate total expected runtime in seconds for a list of items."""
+        user_id = await self.get_valid_user_id()
+        total_seconds = 0
+        async with httpx.AsyncClient(timeout=8) as client:
+            for item_id in item_ids:
+                try:
+                    endpoint = f"{self.base_url}/Users/{user_id}/Items/{item_id}" if user_id else f"{self.base_url}/Items/{item_id}"
+                    resp = await client.get(endpoint, headers=self.headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        ticks = data.get("RunTimeTicks")
+                        if ticks:
+                            total_seconds += int(ticks / 10_000_000)
+                except Exception as e:
+                    logger.warning(f"Error fetching runtime for item {item_id}: {e}")
+        # Default to at least 20 minutes if unknown
+        return max(total_seconds, 1200)
+
+    async def get_session_now_playing(self, session_id: str) -> dict | None:
+        """Fetch now-playing state for a specific session."""
+        try:
+            sessions = await self.get_sessions()
+            for s in sessions:
+                if s["id"] == session_id:
+                    return s
+        except Exception:
+            pass
+        return None
+
     def get_image_url(self, item_id: str, image_tag: str | None = None, max_width: int = 300) -> str:
         """Build URL for an item's primary image."""
         url = f"{self.base_url}/Items/{item_id}/Images/Primary?maxWidth={max_width}"
