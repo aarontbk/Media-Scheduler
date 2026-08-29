@@ -13,73 +13,77 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Top Header -->
+    <!-- Studio Header -->
     <header class="app-header">
-        <div class="header-container">
+        <div class="header-inner">
             <div class="brand">
-                <img src="/static/logo.png" alt="Media Scheduler Logo" class="brand-logo">
+                <img src="/static/logo.png" alt="Logo" class="brand-logo">
                 <span class="brand-name">Media Scheduler</span>
             </div>
             
-            <div class="header-actions">
-                <button class="status-pill" id="tvStatusPill" title="Click to view TV connection details">
-                    <span class="status-dot" id="headerStatusDot"></span>
-                    <span class="status-label" id="headerStatusLabel">Checking TV...</span>
+            <!-- Segmented Navigation -->
+            <nav class="nav-pill-group">
+                <button class="nav-pill view-tab active" data-view="browser">Library</button>
+                <button class="nav-pill view-tab" data-view="playlists">
+                    Playlists <span class="badge hidden" id="playlistsCountBadge">0</span>
                 </button>
-                <button class="icon-btn" id="openSettingsBtn" title="TV & Server Settings">
-                    <span>⚙️</span>
+                <button class="nav-pill view-tab" data-view="timeline">
+                    Schedule <span class="badge hidden" id="pendingCountBadge">0</span>
+                </button>
+            </nav>
+
+            <div class="header-actions">
+                <button class="hardware-status-btn" id="tvStatusPill" title="TV Connection Details">
+                    <span class="status-led" id="headerStatusDot"></span>
+                    <span id="headerStatusLabel">Checking TV...</span>
+                </button>
+                <button class="icon-btn" id="openSettingsBtn" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Setup Notice Banner (hidden when configured) -->
+    <!-- Setup Notice Banner -->
     <div class="setup-banner hidden" id="setupBanner">
         <div class="banner-content">
-            <span class="banner-icon">⚡</span>
             <div class="banner-text">
                 <strong id="bannerTitle">Setup Required:</strong>
-                <span id="bannerMsg">Configure your TV IP address and Jellyfin connection to start scheduling.</span>
+                <span id="bannerMsg">Configure TV IP and Jellyfin connection to start scheduling.</span>
             </div>
             <button class="btn btn-sm btn-primary" id="bannerActionBtn">Configure Now</button>
         </div>
     </div>
 
-    <!-- Main Content Container -->
+    <!-- Main Workspace -->
     <main class="app-main">
         
-        <!-- Navigation Tabs: Browse / Playlists / Timeline -->
-        <nav class="view-nav">
-            <button class="view-tab active" data-view="browser">
-                <span>🎬</span> Library & Search
-            </button>
-            <button class="view-tab" data-view="playlists">
-                <span>📑</span> Playlists
-                <span class="tab-badge hidden" id="playlistsCountBadge">0</span>
-            </button>
-            <button class="view-tab" data-view="timeline">
-                <span>⏱️</span> Scheduled Jobs
-                <span class="tab-badge hidden" id="pendingCountBadge">0</span>
-            </button>
-        </nav>
-
         <!-- VIEW 1: Media Browser -->
         <section class="view-section active" id="browserView">
             
-            <!-- Search & Filters -->
-            <div class="browser-controls">
-                <div class="search-box">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" placeholder="Search movies, TV shows..." autocomplete="off" autocorrect="off">
+            <!-- Controls Bar (Search + Chips) -->
+            <div class="controls-row">
+                <div class="search-wrapper">
+                    <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" class="search-input" id="searchInput" placeholder="Search movies, TV shows, anime..." autocomplete="off">
                     <button class="clear-search-btn hidden" id="clearSearchBtn">✕</button>
                 </div>
                 
-                <div class="filter-chips">
-                    <button class="chip active" data-type="Movie,Series" data-category="">All</button>
-                    <button class="chip" data-type="Series" data-category="">TV Shows</button>
-                    <button class="chip" data-type="Movie" data-category="">Movies</button>
-                    <button class="chip" data-type="Movie,Series" data-category="anime">Anime</button>
-                    <button class="chip-refresh" id="refreshMediaBtn" title="Reload library">↻</button>
+                <div class="filter-group">
+                    <button class="filter-chip chip active" data-type="Movie,Series" data-category="">All</button>
+                    <button class="filter-chip chip" data-type="Series" data-category="">TV Shows</button>
+                    <button class="filter-chip chip" data-type="Movie" data-category="">Movies</button>
+                    <button class="filter-chip chip" data-type="Movie,Series" data-category="anime">Anime</button>
+                    <button class="filter-chip-icon" id="refreshMediaBtn" title="Reload library">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -87,15 +91,15 @@
             <div class="media-container" id="mediaContainer">
                 <div class="loading-state">
                     <div class="spinner"></div>
-                    <p>Loading your Jellyfin library...</p>
+                    <p>Loading Jellyfin library...</p>
                 </div>
             </div>
 
-            <!-- Series Drill-Down View (Inside Browser) -->
+            <!-- Series Drill-Down View -->
             <div class="series-drilldown hidden" id="seriesView">
                 <div class="drilldown-header">
                     <button class="back-btn" id="backToLibraryBtn">
-                        <span>←</span> Back to Library
+                        ← Back to Library
                     </button>
                 </div>
 
@@ -115,14 +119,13 @@
 
         <!-- VIEW 2: Playlists View -->
         <section class="view-section" id="playlistsView">
-            <!-- Playlists Main List -->
             <div id="playlistsMainContainer">
                 <div class="section-title-row">
                     <div>
-                        <h2>Custom Playlists</h2>
-                        <p class="section-subtitle">Chain multiple movies or episodes into a playlist to play or schedule together.</p>
+                        <h2>Playlists</h2>
+                        <p class="section-subtitle">Chain multiple movies or episodes into sequential playback sessions.</p>
                     </div>
-                    <button class="btn btn-primary" id="openCreatePlaylistBtn">➕ New Playlist</button>
+                    <button class="btn btn-primary" id="openCreatePlaylistBtn">Create Playlist</button>
                 </div>
 
                 <div class="playlists-grid" id="playlistsGrid">
@@ -130,23 +133,22 @@
                 </div>
 
                 <div class="empty-state hidden" id="emptyPlaylistsState">
-                    <div class="empty-icon">📑</div>
                     <h3>No Playlists Yet</h3>
                     <p>Create a playlist or click "Add to Playlist" on any media item in your library.</p>
-                    <button class="btn btn-primary" id="createFirstPlaylistBtn">➕ Create First Playlist</button>
+                    <button class="btn btn-primary" id="createFirstPlaylistBtn">Create Playlist</button>
                 </div>
             </div>
 
-            <!-- Playlist Detail / Items View (hidden by default) -->
+            <!-- Playlist Detail / Items View -->
             <div class="playlist-detail-view hidden" id="playlistDetailView">
                 <div class="drilldown-header">
                     <button class="back-btn" id="backToPlaylistsBtn">
-                        <span>←</span> Back to Playlists
+                        ← Back to Playlists
                     </button>
                     <div class="playlist-detail-actions">
-                        <button class="btn btn-primary btn-sm" id="openAddItemsToPlaylistBtn">➕ Add Shows / Movies</button>
-                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">✏️ Edit Details</button>
-                        <button class="btn btn-danger btn-sm" id="deletePlaylistBtn">🗑️ Delete</button>
+                        <button class="btn btn-primary btn-sm" id="openAddItemsToPlaylistBtn">Add Media</button>
+                        <button class="btn btn-secondary btn-sm" id="editPlaylistInfoBtn">Edit Details</button>
+                        <button class="btn btn-danger btn-sm" id="deletePlaylistBtn">Delete</button>
                     </div>
                 </div>
 
@@ -155,13 +157,13 @@
                 </div>
 
                 <div class="playlist-action-bar">
-                    <button class="btn btn-secondary" id="playPlaylistNowBtn">⚡ Play on TV Now</button>
-                    <button class="btn btn-primary" id="schedulePlaylistBtn">📅 Schedule Playlist</button>
+                    <button class="btn btn-secondary" id="playPlaylistNowBtn">Play on TV</button>
+                    <button class="btn btn-primary" id="schedulePlaylistBtn">Schedule Playlist</button>
                 </div>
 
-                <div class="section-title-row" style="margin-top: 1rem; margin-bottom: 0.5rem;">
-                    <h3>Playlist Episodes & Movies</h3>
-                    <span class="text-dim" style="font-size: 0.8rem;">Use ▲/▼ to change play order</span>
+                <div class="section-title-row" style="margin-top: 1.25rem; margin-bottom: 0.5rem;">
+                    <h3>Queue Sequence</h3>
+                    <span class="text-tertiary" style="font-size: 0.8rem;">Use Up/Down to adjust order</span>
                 </div>
 
                 <div class="playlist-items-list" id="playlistItemsList">
@@ -174,10 +176,10 @@
         <section class="view-section" id="timelineView">
             <div class="section-title-row">
                 <div>
-                    <h2>Scheduled Playback Timeline</h2>
-                    <p class="section-subtitle">Automated TV wake-up and playback execution with auto-sleep on finish.</p>
+                    <h2>Scheduled Jobs</h2>
+                    <p class="section-subtitle">Automated TV wake-up, playback execution, and graceful auto-sleep.</p>
                 </div>
-                <button class="btn btn-secondary btn-sm" id="refreshTimelineBtn">↻ Refresh</button>
+                <button class="btn btn-secondary btn-sm" id="refreshTimelineBtn">Refresh</button>
             </div>
 
             <div class="timeline-list" id="timelineList">
@@ -185,15 +187,14 @@
             </div>
 
             <div class="empty-state hidden" id="emptyTimelineState">
-                <div class="empty-icon">📅</div>
-                <h3>No Scheduled Playback</h3>
+                <h3>No Scheduled Jobs</h3>
                 <p>Select a movie, episode, or playlist to set up automatic playback.</p>
                 <button class="btn btn-primary" id="goToLibraryBtn">Browse Library</button>
             </div>
         </section>
     </main>
 
-    <!-- Schedule Modal / Drawer -->
+    <!-- Schedule Modal -->
     <div class="modal-overlay hidden" id="scheduleModal">
         <div class="modal-card">
             <div class="modal-header">
@@ -209,7 +210,7 @@
 
                 <!-- Recurrence Selector -->
                 <div class="form-section">
-                    <label class="form-label">Schedule Frequency</label>
+                    <label class="form-label">Frequency</label>
                     <div class="recurrence-toggle-group" id="recurrenceToggleGroup">
                         <button class="toggle-btn active" data-freq="once">Once</button>
                         <button class="toggle-btn" data-freq="daily">Daily</button>
@@ -220,7 +221,7 @@
 
                 <!-- Timing Section: Once -->
                 <div class="form-section" id="timingOnceSection">
-                    <label class="form-label" for="scheduleDatetime">Select Date & Time</label>
+                    <label class="form-label" for="scheduleDatetime">Date & Time</label>
                     <input type="datetime-local" class="form-input" id="scheduleDatetime">
                     
                     <div class="preset-times">
@@ -267,49 +268,66 @@
 
                     <!-- Recurring Time of Day -->
                     <div class="form-group">
-                        <label class="form-label" for="scheduleTimeOfDay">Playback Time (HH:MM)</label>
+                        <label class="form-label" for="scheduleTimeOfDay">Playback Time</label>
                         <input type="time" class="form-input" id="scheduleTimeOfDay" value="20:00">
                     </div>
                 </div>
 
                 <!-- Auto Power Off Toggle -->
-                <div class="form-section checkbox-section">
+                <div class="form-section">
                     <label class="toggle-checkbox-label">
                         <input type="checkbox" id="scheduleAutoTurnOff" checked>
-                        <span class="checkbox-custom"></span>
                         <div class="checkbox-desc">
                             <strong>Graceful TV Power-Off</strong>
-                            <p>Automatically monitor playback and put TV to sleep when movie or playlist finishes.</p>
+                            <p>Monitor playback and put TV to sleep when finished.</p>
                         </div>
                     </label>
-                </div>
-
-                <!-- Wake-up Notice -->
-                <div class="info-card">
-                    <span class="info-icon">💡</span>
-                    <p>The scheduler connects via ADB 30 seconds before start time to wake the TV and launch Jellyfin.</p>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="instantPlayBtn">⚡ Play Now</button>
-                <button class="btn btn-primary" id="confirmScheduleBtn">📅 Schedule Job</button>
+                <button class="btn btn-secondary" id="instantPlayBtn">Play Now</button>
+                <button class="btn btn-primary" id="confirmScheduleBtn">Schedule Job</button>
             </div>
         </div>
     </div>
 
-    <!-- Add to Playlist Modal -->
+    <!-- Browse & Add to Playlist Modal -->
+    <div class="modal-overlay hidden" id="browseAddItemsModal">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3 id="browseAddItemsModalTitle">Add Media to Playlist</h3>
+                <button class="modal-close-btn" id="closeBrowseAddItemsModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-wrapper" style="margin-bottom: 1rem; width: 100%; max-width: 100%;">
+                    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" class="search-input" id="playlistSearchInput" placeholder="Search library to add..." autocomplete="off">
+                </div>
+                <div class="playlist-picker-container" id="playlistPickerContainer">
+                    <!-- Media search results with "+ Add" buttons -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="closeBrowseAddItemsBtn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add to Playlist Modal (from library cards) -->
     <div class="modal-overlay hidden" id="addToPlaylistModal">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>➕ Add to Playlist</h3>
+                <h3>Add to Playlist</h3>
                 <button class="modal-close-btn" id="closeAddToPlaylistModal">✕</button>
             </div>
             <div class="modal-body">
                 <div class="selected-media-card" id="addToPlaylistMediaCard"></div>
                 
                 <div class="form-section">
-                    <label class="form-label" for="targetPlaylistSelect">Choose Existing Playlist</label>
+                    <label class="form-label" for="targetPlaylistSelect">Choose Playlist</label>
                     <select class="form-input" id="targetPlaylistSelect">
                         <!-- Populated dynamically -->
                     </select>
@@ -343,7 +361,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="playlistDescInput">Description (Optional)</label>
-                    <textarea class="form-input" id="playlistDescInput" rows="2" placeholder="e.g. Movies for Friday night dinner"></textarea>
+                    <textarea class="form-input" id="playlistDescInput" rows="2" placeholder="e.g. Movies for dinner sequence"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -353,43 +371,19 @@
         </div>
     </div>
 
-    <!-- Browse & Add to Playlist Modal -->
-    <div class="modal-overlay hidden" id="browseAddItemsModal">
-        <div class="modal-card modal-lg">
-            <div class="modal-header">
-                <h3 id="browseAddItemsModalTitle">➕ Add Media to Playlist</h3>
-                <button class="modal-close-btn" id="closeBrowseAddItemsModal">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="browser-controls" style="margin-bottom: 1rem;">
-                    <div class="search-box">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" id="playlistSearchInput" placeholder="Search movies, TV shows, anime to add..." autocomplete="off">
-                    </div>
-                </div>
-                <div class="playlist-picker-container" id="playlistPickerContainer" style="max-height: 50vh; overflow-y: auto;">
-                    <!-- Media search results with "+ Add" buttons -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" id="closeBrowseAddItemsBtn">Done</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Settings & TV Setup Modal -->
+    <!-- Settings Modal -->
     <div class="modal-overlay hidden" id="settingsModal">
         <div class="modal-card modal-lg">
             <div class="modal-header">
-                <h3>⚙️ TV, Server & Timezone Settings</h3>
+                <h3>Settings</h3>
                 <button class="modal-close-btn" id="closeSettingsModal">✕</button>
             </div>
 
             <!-- Settings Tabs -->
             <div class="settings-tabs">
-                <button class="settings-tab active" data-tab="tv-tab">📺 Android TV (ADB)</button>
-                <button class="settings-tab" data-tab="jellyfin-tab">🍇 Jellyfin Server</button>
-                <button class="settings-tab" data-tab="system-tab">🌐 Timezone & Clock</button>
+                <button class="settings-tab active" data-tab="tv-tab">Android TV (ADB)</button>
+                <button class="settings-tab" data-tab="jellyfin-tab">Jellyfin Server</button>
+                <button class="settings-tab" data-tab="system-tab">Timezone & Clock</button>
             </div>
 
             <div class="modal-body">
@@ -401,22 +395,21 @@
                     <div class="adb-status-box" id="adbStatusBox">
                         <div class="status-box-header">
                             <div class="status-indicator">
-                                <span class="status-dot" id="adbBoxDot"></span>
+                                <span class="status-led" id="adbBoxDot"></span>
                                 <strong id="adbBoxTitle">Checking TV Status...</strong>
                             </div>
-                            <button class="btn btn-sm btn-secondary" id="refreshAdbStatusBtn">↻ Check</button>
+                            <button class="btn btn-sm btn-secondary" id="refreshAdbStatusBtn">Check</button>
                         </div>
                         <p class="status-box-msg" id="adbBoxMessage">Connecting to TV...</p>
 
                         <!-- Action Area for 'unauthorized' prompt on screen -->
                         <div class="tv-prompt-callout hidden" id="tvPromptCallout">
-                            <div class="prompt-icon">📺⚠️</div>
                             <div class="prompt-text">
-                                <strong>LOOK AT YOUR TV SCREEN NOW!</strong>
+                                <strong>Authorization Required</strong>
                                 <p>A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV.</p>
-                                <p>👉 Use your remote to check <strong>"Always allow from this computer"</strong> and click <strong>Allow / OK</strong>.</p>
+                                <p>Check <strong>"Always allow from this computer"</strong> and press OK on your remote.</p>
                             </div>
-                            <button class="btn btn-primary btn-sm" id="verifyAuthBtn">🔄 I Allowed It (Verify)</button>
+                            <button class="btn btn-primary btn-sm" id="verifyAuthBtn">Verify Authorization</button>
                         </div>
                     </div>
 
@@ -425,7 +418,7 @@
                         <div class="form-group">
                             <label class="form-label" for="tvIpInput">TCL TV IP Address</label>
                             <input type="text" class="form-input" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
-                            <span class="form-hint">Found in TV Settings → Network & Internet → Wi-Fi / Ethernet Details.</span>
+                            <span class="form-hint">Found in TV Settings → Network & Internet → Network Details.</span>
                         </div>
 
                         <div class="form-group">
@@ -441,29 +434,29 @@
                     </div>
 
                     <div class="action-buttons-row">
-                        <button class="btn btn-primary" id="connectTvBtn">🔗 Connect / Pair TV</button>
-                        <button class="btn btn-secondary" id="saveTvSettingsBtn">Save Settings</button>
+                        <button class="btn btn-primary" id="connectTvBtn">Connect / Pair TV</button>
+                        <button class="btn btn-secondary" id="saveTvSettingsBtn">Save TV Settings</button>
                     </div>
 
                     <!-- Test Actions -->
                     <div class="test-actions-section">
                         <h4>Test TV Controls:</h4>
                         <div class="test-buttons-grid">
-                            <button class="btn btn-secondary btn-sm" id="testWakeBtn">⚡ Test Screen Wake</button>
-                            <button class="btn btn-secondary btn-sm" id="testLaunchAppBtn">🚀 Test Launch Jellyfin</button>
-                            <button class="btn btn-secondary btn-sm" id="testSleepBtn">🌙 Test Sleep / Power-Off</button>
+                            <button class="btn btn-secondary btn-sm" id="testWakeBtn">Test Screen Wake</button>
+                            <button class="btn btn-secondary btn-sm" id="testLaunchAppBtn">Test Launch Jellyfin</button>
+                            <button class="btn btn-secondary btn-sm" id="testSleepBtn">Test Standby / Sleep</button>
                         </div>
                     </div>
 
                     <!-- Step-by-Step Setup Instructions Accordion -->
                     <details class="setup-guide">
-                        <summary>📖 How to enable ADB Network Debugging on your Android TV</summary>
+                        <summary>How to enable ADB Network Debugging on Android TV</summary>
                         <div class="guide-steps">
                             <ol>
-                                <li><strong>Enable Developer Mode:</strong> On your TV, go to <em>Settings → System → About</em>. Scroll down to <strong>Android TV OS build</strong> and click it <strong>7 times</strong> until it says <em>"You are now a developer!"</em>.</li>
-                                <li><strong>Enable Network / USB Debugging:</strong> Go to <em>Settings → System → Developer options</em>. Toggle <strong>USB debugging</strong> and <strong>Network debugging</strong> to <strong>ON</strong>.</li>
-                                <li><strong>Enter TV IP:</strong> Look at your TV's IP address in Network settings and enter it in the box above.</li>
-                                <li><strong>Allow Connection:</strong> Click <strong>"Connect / Pair TV"</strong>. When the prompt appears on your TV screen, check <em>"Always allow"</em> and press OK.</li>
+                                <li><strong>Enable Developer Mode:</strong> Go to <em>Settings → System → About</em>. Click <strong>Android TV OS build</strong> 7 times until it says <em>"You are now a developer!"</em>.</li>
+                                <li><strong>Enable Network Debugging:</strong> In <em>Settings → System → Developer options</em>, toggle <strong>USB debugging</strong> and <strong>Network debugging</strong> to ON.</li>
+                                <li><strong>Enter TV IP:</strong> Input your TV's IP address above and click <strong>Connect / Pair TV</strong>.</li>
+                                <li><strong>Allow Connection:</strong> When the prompt appears on TV, check <em>"Always allow"</em> and press OK.</li>
                             </ol>
                         </div>
                     </details>
@@ -484,15 +477,15 @@
                     </div>
 
                     <div class="action-buttons-row">
-                        <button class="btn btn-secondary" id="testJfBtn">🔍 Test Connection & Fetch Users</button>
+                        <button class="btn btn-secondary" id="testJfBtn">Test Connection & Fetch Users</button>
                     </div>
 
                     <div class="form-group" style="margin-top: 1rem;">
-                        <label class="form-label" for="jfUserSelect">Target User Account</label>
+                        <label class="form-label" for="jfUserSelect">Target User Profile</label>
                         <select class="form-input" id="jfUserSelect">
-                            <option value="">-- Click 'Test Connection' to load users --</option>
+                            <option value="">-- Click 'Test Connection' to load profiles --</option>
                         </select>
-                        <span class="form-hint">The user profile used for browsing library and playback state.</span>
+                        <span class="form-hint">Profile used for media library queries and session tracking.</span>
                     </div>
 
                     <div class="action-buttons-row" style="margin-top: 1.5rem;">
@@ -502,14 +495,6 @@
 
                 <!-- TAB 3: Timezone & System Clock -->
                 <div class="settings-panel" id="system-tab">
-                    <div class="info-card" style="margin-bottom: 1.25rem;">
-                        <span class="info-icon">🕒</span>
-                        <div>
-                            <strong>Local Clock Synchronization</strong>
-                            <p>Ensures that scheduled times (e.g. 20:00) trigger at your exact local time.</p>
-                        </div>
-                    </div>
-
                     <div class="form-group">
                         <label class="form-label" for="timezoneSelect">Scheduler Timezone</label>
                         <select class="form-input" id="timezoneSelect">
@@ -537,7 +522,7 @@
 
                     <div class="action-buttons-row" style="margin-top: 1.5rem;">
                         <button class="btn btn-primary" id="saveTimezoneBtn">Save Timezone</button>
-                        <button class="btn btn-secondary" id="autoDetectTzBtn">⚡ Sync with Browser Timezone</button>
+                        <button class="btn btn-secondary" id="autoDetectTzBtn">Sync with Browser Timezone</button>
                     </div>
                 </div>
 

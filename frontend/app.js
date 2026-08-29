@@ -179,8 +179,8 @@ function showToast(message, type = 'success') {
     elements.toastContainer.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3500);
+        setTimeout(() => toast.remove(), 250);
+    }, 3000);
 }
 
 function debounce(fn, delay = 150) {
@@ -213,7 +213,7 @@ function formatDateTime(isoStr) {
     const d = new Date(isoStr);
     return d.toLocaleDateString(undefined, {
         weekday: 'short', month: 'short', day: 'numeric'
-    }) + ' ' + d.toLocaleTimeString(undefined, {
+    }) + ' · ' + d.toLocaleTimeString(undefined, {
         hour: '2-digit', minute: '2-digit'
     });
 }
@@ -335,7 +335,6 @@ const api = {
         return await res.json();
     },
 
-    // Playlists API
     async getPlaylists() {
         const res = await fetch('/api/playlists');
         if (!res.ok) throw new Error('Failed to load playlists');
@@ -408,7 +407,6 @@ const api = {
         return await res.json();
     },
 
-    // Scheduling API
     async getSchedules() {
         const res = await fetch('/api/schedule');
         if (!res.ok) throw new Error('Failed to load schedule');
@@ -455,9 +453,7 @@ async function initApp() {
     loadPlaylistsCount();
     loadTimeline();
 
-    // Start background TV status polling every 25 seconds
     setInterval(updateTvStatusUI, 25000);
-    // Start clock updates
     setInterval(updateClockPreviews, 1000);
 }
 
@@ -473,7 +469,7 @@ async function loadInitialSettings() {
         elements.jfKeyInput.value = settings.jellyfin_api_key || '';
 
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
-        elements.browserTzHint.textContent = `Browser detected: ${browserTz}`;
+        elements.browserTzHint.textContent = `Detected browser timezone: ${browserTz}`;
         elements.timezoneSelect.value = settings.app_timezone || browserTz || 'Asia/Jerusalem';
 
         if (settings.jellyfin_users && settings.jellyfin_users.length > 0) {
@@ -492,7 +488,7 @@ function updateClockPreviews() {
     const tz = elements.timezoneSelect ? elements.timezoneSelect.value : (state.settings.app_timezone || 'Asia/Jerusalem');
     
     if (elements.browserClockPreview) {
-        elements.browserClockPreview.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ` (${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
+        elements.browserClockPreview.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     
     if (elements.serverClockPreview) {
@@ -510,19 +506,19 @@ async function updateTvStatusUI() {
         state.tvStatus = status;
 
         if (status.session_found && status.is_active) {
-            elements.headerStatusDot.className = 'status-dot connected';
-            elements.headerStatusLabel.textContent = status.device_name || 'TV Online';
+            elements.headerStatusDot.className = 'status-led connected';
+            elements.headerStatusLabel.textContent = status.device_name || 'TV Active';
         } else if (status.adb_reachable) {
-            elements.headerStatusDot.className = 'status-dot partial';
-            elements.headerStatusLabel.textContent = 'TV Paired (ADB)';
+            elements.headerStatusDot.className = 'status-led connected';
+            elements.headerStatusLabel.textContent = 'TV Ready (ADB)';
         } else if (status.adb_state === 'unauthorized') {
-            elements.headerStatusDot.className = 'status-dot partial';
+            elements.headerStatusDot.className = 'status-led partial';
             elements.headerStatusLabel.textContent = 'Prompt on TV';
         } else if (!status.configured_tv_ip) {
-            elements.headerStatusDot.className = 'status-dot';
+            elements.headerStatusDot.className = 'status-led';
             elements.headerStatusLabel.textContent = 'Setup TV';
         } else {
-            elements.headerStatusDot.className = 'status-dot offline';
+            elements.headerStatusDot.className = 'status-led offline';
             elements.headerStatusLabel.textContent = 'TV Offline';
         }
 
@@ -539,33 +535,33 @@ async function updateTvStatusUI() {
 
         renderAdbStatusBox(status);
     } catch (err) {
-        elements.headerStatusDot.className = 'status-dot offline';
+        elements.headerStatusDot.className = 'status-led offline';
         elements.headerStatusLabel.textContent = 'Server Offline';
     }
 }
 
 function renderAdbStatusBox(status) {
     const st = status.adb_state || 'offline';
-    elements.adbBoxDot.className = `status-dot ${status.adb_reachable ? 'connected' : (st === 'unauthorized' ? 'partial' : 'offline')}`;
+    elements.adbBoxDot.className = `status-led ${status.adb_reachable ? 'connected' : (st === 'unauthorized' ? 'partial' : 'offline')}`;
     
     if (st === 'device') {
-        elements.adbBoxTitle.textContent = '🟢 TV Connected & Authorized';
+        elements.adbBoxTitle.textContent = 'TV Connected & Ready';
         elements.adbBoxMessage.textContent = status.adb_message || 'The TV is authorized and ready for automated wake-up, playback, and auto-sleep.';
         elements.tvPromptCallout.classList.add('hidden');
     } else if (st === 'unauthorized') {
-        elements.adbBoxTitle.textContent = '🟡 Authorization Required';
+        elements.adbBoxTitle.textContent = 'Authorization Required';
         elements.adbBoxMessage.textContent = 'Connection initiated, but waiting for permission on the TV.';
         elements.tvPromptCallout.classList.remove('hidden');
     } else if (st === 'cannot_connect') {
-        elements.adbBoxTitle.textContent = '🔴 Cannot Reach TV';
+        elements.adbBoxTitle.textContent = 'Cannot Reach TV';
         elements.adbBoxMessage.textContent = status.adb_message;
         elements.tvPromptCallout.classList.add('hidden');
     } else if (st === 'not_configured') {
-        elements.adbBoxTitle.textContent = '⚙️ TV IP Not Configured';
+        elements.adbBoxTitle.textContent = 'TV IP Not Configured';
         elements.adbBoxMessage.textContent = 'Enter your TV IP address below and click Connect.';
         elements.tvPromptCallout.classList.add('hidden');
     } else {
-        elements.adbBoxTitle.textContent = '🔴 TV Offline';
+        elements.adbBoxTitle.textContent = 'TV Offline';
         elements.adbBoxMessage.textContent = status.adb_message || 'Make sure the TV is powered on and connected to the network.';
         elements.tvPromptCallout.classList.add('hidden');
     }
@@ -585,7 +581,7 @@ async function loadLibraryMedia() {
     elements.mediaContainer.innerHTML = `
         <div class="loading-state">
             <div class="spinner"></div>
-            <p>Fetching movies & TV shows...</p>
+            <p>Fetching media from library...</p>
         </div>
     `;
 
@@ -595,7 +591,6 @@ async function loadLibraryMedia() {
     } catch (err) {
         elements.mediaContainer.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">⚠️</div>
                 <h3>Failed to load library</h3>
                 <p>${escapeHtml(err.message)}</p>
                 <button class="btn btn-primary btn-sm" onclick="openSettingsModal('jellyfin-tab')">Check Jellyfin Settings</button>
@@ -608,7 +603,6 @@ function renderMediaGrid(items) {
     if (!items || items.length === 0) {
         elements.mediaContainer.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">🔍</div>
                 <h3>No media found</h3>
                 <p>Try searching for a different title or select a different filter.</p>
             </div>
@@ -629,18 +623,18 @@ function renderMediaGrid(items) {
             <div class="poster-wrapper">
                 ${item.image_tag 
                     ? `<img class="poster-img" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}" loading="lazy">` 
-                    : `<div class="poster-fallback">${item.type === 'Movie' ? '🎬' : '📺'}</div>`}
-                <span class="media-type-badge ${isAnime ? 'anime' : ''}">${badgeLabel}</span>
+                    : `<div class="poster-fallback">${item.type === 'Movie' ? 'Movie' : 'Series'}</div>`}
+                <span class="media-type-badge">${badgeLabel}</span>
             </div>
             <div class="card-content">
                 <div class="card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
                 <div class="card-meta">
                     ${item.year ? `<span>${item.year}</span>` : ''}
-                    ${runtimeText ? `<span>• ${runtimeText}</span>` : ''}
+                    ${runtimeText ? `<span>· ${runtimeText}</span>` : ''}
                 </div>
                 <div class="card-actions-row">
-                    <button class="card-btn action-schedule-btn">📅 Schedule</button>
-                    <button class="card-btn secondary action-playlist-btn">➕ Playlist</button>
+                    <button class="card-btn action-schedule-btn">Schedule</button>
+                    <button class="card-btn secondary action-playlist-btn">+ Playlist</button>
                 </div>
             </div>
         </div>
@@ -704,7 +698,7 @@ async function openSeriesDrilldown(seriesData) {
             : ''}
         <div class="hero-info">
             <h2>${escapeHtml(seriesData.name)}</h2>
-            <div class="hero-meta">${seriesData.year || ''} • TV Series</div>
+            <div class="hero-meta">${seriesData.year || ''} · TV Series</div>
             <p class="hero-overview">${escapeHtml(seriesData.overview || '')}</p>
         </div>
     `;
@@ -769,11 +763,11 @@ async function loadSeasonEpisodes(seriesId, seasonId) {
                 </div>
                 <div class="ep-info">
                     <div class="ep-title">${escapeHtml(ep.name)}</div>
-                    <div class="ep-meta">${runtimeText ? `${runtimeText}` : ''} ${ep.overview ? `• ${escapeHtml(ep.overview.slice(0, 120))}...` : ''}</div>
+                    <div class="ep-meta">${runtimeText ? `${runtimeText}` : ''} ${ep.overview ? `· ${escapeHtml(ep.overview.slice(0, 120))}...` : ''}</div>
                 </div>
                 <div class="ep-actions-group">
-                    <button class="btn btn-sm btn-primary action-schedule-ep">📅 Schedule</button>
-                    <button class="btn btn-sm btn-secondary action-playlist-ep">➕ Playlist</button>
+                    <button class="btn btn-sm btn-primary action-schedule-ep">Schedule</button>
+                    <button class="btn btn-sm btn-secondary action-playlist-ep">+ Playlist</button>
                 </div>
             </div>
         `;}).join('');
@@ -842,21 +836,18 @@ function renderPlaylistsGrid(playlists) {
         return `
         <div class="playlist-card" data-id="${pl.id}">
             <div class="playlist-card-header">
-                <div>
-                    <div class="playlist-card-title">${escapeHtml(pl.name)}</div>
-                </div>
-                <span class="playlist-card-icon">📑</span>
+                <div class="playlist-card-title">${escapeHtml(pl.name)}</div>
             </div>
             <p class="playlist-card-desc">${escapeHtml(pl.description || 'No description.')}</p>
             <div class="playlist-card-meta">
                 <span class="playlist-meta-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
-                <span>⏱️ ${totalDuration}</span>
+                <span>${totalDuration}</span>
             </div>
             <div class="playlist-card-actions">
-                <button class="btn btn-sm btn-primary action-card-edit" data-id="${pl.id}">✏️ Edit</button>
-                <button class="btn btn-sm btn-secondary action-card-play" data-id="${pl.id}">⚡ Play</button>
-                <button class="btn btn-sm btn-secondary action-card-sched" data-id="${pl.id}">📅 Schedule</button>
-                <button class="btn btn-sm btn-danger action-card-del" data-id="${pl.id}" title="Delete">🗑️</button>
+                <button class="btn btn-sm btn-primary action-card-edit" data-id="${pl.id}">Edit</button>
+                <button class="btn btn-sm btn-secondary action-card-play" data-id="${pl.id}">Play</button>
+                <button class="btn btn-sm btn-secondary action-card-sched" data-id="${pl.id}">Schedule</button>
+                <button class="btn btn-sm btn-danger action-card-del" data-id="${pl.id}">Delete</button>
             </div>
         </div>
     `;}).join('');
@@ -929,7 +920,7 @@ async function openPlaylistDetail(playlistId) {
             <p>${escapeHtml(pl.description || 'No description.')}</p>
             <div class="playlist-hero-stats">
                 <span class="playlist-hero-stat-badge">${pl.items_count} item${pl.items_count === 1 ? '' : 's'}</span>
-                <span class="playlist-hero-stat-badge">⏱️ Total Runtime: ${totalDuration}</span>
+                <span class="playlist-hero-stat-badge">Total Runtime: ${totalDuration}</span>
             </div>
         `;
 
@@ -945,10 +936,8 @@ function renderPlaylistItemsList(items) {
     if (!items || items.length === 0) {
         elements.playlistItemsList.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📭</div>
                 <h3>Playlist is Empty</h3>
-                <p>Click "➕ Add Shows / Movies" above to add items to this playlist.</p>
-                <button class="btn btn-primary btn-sm" onclick="openBrowseAddItemsModal()">➕ Add Shows / Movies</button>
+                <p>Click "Add Media" above to select movies or episodes from your library.</p>
             </div>
         `;
         return;
@@ -957,27 +946,28 @@ function renderPlaylistItemsList(items) {
     elements.playlistItemsList.innerHTML = items.map((item, idx) => {
         const itemRuntime = formatRuntime(item.runtime_minutes);
         const isEpisode = item.item_type === 'Episode' || (item.name && item.name.includes(' - S'));
+        const orderPadded = String(idx + 1).padStart(2, '0');
         let itemPosterHtml = '';
         if (item.image_tag) {
             itemPosterHtml = `<img class="playlist-item-poster" src="${getImageUrl(item.jellyfin_item_id, item.image_tag)}" alt="${escapeHtml(item.name)}">`;
         } else if (isEpisode) {
             itemPosterHtml = `<div class="playlist-item-fallback ep">${escapeHtml(extractEpLabel(item.name))}</div>`;
         } else {
-            itemPosterHtml = `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? '🎬' : '📺'}</div>`;
+            itemPosterHtml = `<div class="playlist-item-fallback">${item.item_type === 'Movie' ? 'Movie' : 'Show'}</div>`;
         }
 
         return `
         <div class="playlist-item-row" data-id="${item.id}" data-idx="${idx}">
-            <div class="playlist-item-order">${idx + 1}</div>
+            <div class="playlist-item-order">${orderPadded}</div>
             ${itemPosterHtml}
             <div class="playlist-item-info">
                 <div class="playlist-item-title">${escapeHtml(item.name)}</div>
-                <div class="playlist-item-meta">${item.item_type || 'Media'} ${itemRuntime ? `• ${itemRuntime}` : ''}</div>
+                <div class="playlist-item-meta">${item.item_type || 'Media'} ${itemRuntime ? `· ${itemRuntime}` : ''}</div>
             </div>
             <div class="playlist-item-controls">
                 <button class="btn-icon-subtle move-up" title="Move Up" ${idx === 0 ? 'disabled' : ''}>▲</button>
                 <button class="btn-icon-subtle move-down" title="Move Down" ${idx === items.length - 1 ? 'disabled' : ''}>▼</button>
-                <button class="btn-icon-subtle delete" title="Remove from playlist">✕</button>
+                <button class="btn-icon-subtle delete" title="Remove">✕</button>
             </div>
         </div>
     `;}).join('');
@@ -1020,7 +1010,7 @@ function renderPlaylistItemsList(items) {
                 const updatedPl = await api.removeItemFromPlaylist(state.currentPlaylist.id, itemId);
                 state.currentPlaylist = updatedPl;
                 openPlaylistDetail(state.currentPlaylist.id);
-                showToast('Item removed from playlist', 'success');
+                showToast('Item removed', 'success');
             } catch (e) {
                 showToast('Failed to remove item', 'error');
             }
@@ -1031,14 +1021,14 @@ function renderPlaylistItemsList(items) {
 // --- Browse & Add Items to Playlist Modal ---
 async function openBrowseAddItemsModal() {
     if (!state.currentPlaylist) return;
-    elements.browseAddItemsModalTitle.textContent = `➕ Add Media to "${state.currentPlaylist.name}"`;
+    elements.browseAddItemsModalTitle.textContent = `Add Media to "${state.currentPlaylist.name}"`;
     elements.playlistSearchInput.value = '';
     elements.browseAddItemsModal.classList.remove('hidden');
     loadPlaylistPickerResults('');
 }
 
 async function loadPlaylistPickerResults(query = '') {
-    elements.playlistPickerContainer.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Searching media...</p></div>';
+    elements.playlistPickerContainer.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Searching library...</p></div>';
 
     try {
         const items = await api.fetchMedia(query, 'Movie,Series');
@@ -1054,13 +1044,13 @@ async function loadPlaylistPickerResults(query = '') {
                 <div class="picker-item-left">
                     ${item.image_tag 
                         ? `<img class="picker-item-poster" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}">` 
-                        : `<div class="picker-item-fallback">${item.type === 'Movie' ? '🎬' : '📺'}</div>`}
+                        : `<div class="picker-item-fallback">${item.type === 'Movie' ? 'Movie' : 'Series'}</div>`}
                     <div>
                         <div class="picker-item-title">${escapeHtml(item.name)}</div>
-                        <div class="picker-item-meta">${item.type} ${item.year ? `(${item.year})` : ''} ${runtimeText ? `• ${runtimeText}` : ''}</div>
+                        <div class="picker-item-meta">${item.type} ${item.year ? `(${item.year})` : ''} ${runtimeText ? `· ${runtimeText}` : ''}</div>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-primary add-to-active-pl-btn">➕ Add</button>
+                <button class="btn btn-sm btn-primary add-to-active-pl-btn">+ Add</button>
             </div>
         `;}).join('');
 
@@ -1083,13 +1073,12 @@ async function loadPlaylistPickerResults(query = '') {
                     state.currentPlaylist = updatedPl;
                     btn.textContent = '✓ Added';
                     btn.classList.replace('btn-primary', 'btn-secondary');
-                    showToast(`Added "${itemData.name}" to playlist!`, 'success');
-                    // Refresh background detail view
+                    showToast(`Added "${itemData.name}"`, 'success');
                     renderPlaylistItemsList(updatedPl.items);
                 } catch (err) {
                     showToast(err.message, 'error');
                     btn.disabled = false;
-                    btn.textContent = '➕ Add';
+                    btn.textContent = '+ Add';
                 }
             });
         });
@@ -1111,14 +1100,14 @@ async function openAddToPlaylistModal(mediaData) {
     } else if (isEpisode) {
         posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(mediaData.name))}</div>`;
     } else {
-        posterHtml = `<div class="modal-media-fallback">${mediaData.type === 'Movie' ? '🎬' : '📺'}</div>`;
+        posterHtml = `<div class="modal-media-fallback">${mediaData.type === 'Movie' ? 'Movie' : 'Series'}</div>`;
     }
 
     elements.addToPlaylistMediaCard.innerHTML = `
         ${posterHtml}
         <div class="modal-media-info">
             <h4>${escapeHtml(mediaData.name)}</h4>
-            <p>${mediaData.type || 'Media'} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
+            <p>${mediaData.type || 'Media'} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
         </div>
     `;
 
@@ -1169,7 +1158,7 @@ async function handleConfirmAddToPlaylist() {
         }
 
         await api.addItemToPlaylist(targetPlaylistId, itemData);
-        showToast('Added to playlist successfully!', 'success');
+        showToast('Added to playlist successfully', 'success');
         elements.addToPlaylistModal.classList.add('hidden');
         loadPlaylistsCount();
     } catch (err) {
@@ -1193,27 +1182,25 @@ function openScheduleModal(targetData) {
     } else if (isEpisode) {
         posterHtml = `<div class="modal-media-fallback ep-badge">${escapeHtml(extractEpLabel(targetData.name))}</div>`;
     } else if (isPlaylist) {
-        posterHtml = `<div class="modal-media-fallback">📑</div>`;
+        posterHtml = `<div class="modal-media-fallback">Playlist</div>`;
     } else {
-        posterHtml = `<div class="modal-media-fallback">${targetData.type === 'Movie' ? '🎬' : '📺'}</div>`;
+        posterHtml = `<div class="modal-media-fallback">${targetData.type === 'Movie' ? 'Movie' : 'Series'}</div>`;
     }
 
     elements.modalMediaCard.innerHTML = `
         ${posterHtml}
         <div class="modal-media-info">
             <h4>${escapeHtml(targetData.name)}</h4>
-            <p>${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `• ${runtimeFormatted}` : ''}</p>
+            <p>${isPlaylist ? 'Custom Playlist' : (targetData.type || 'Media')} ${runtimeFormatted ? `· ${runtimeFormatted}` : ''}</p>
         </div>
     `;
 
-    // Reset recurrence to 'once'
     setRecurrenceFrequency('once');
 
     const defaultTime = new Date();
     defaultTime.setMinutes(defaultTime.getMinutes() + 15);
     elements.scheduleDatetime.value = toLocalDatetimeString(defaultTime);
     
-    // Set default time of day to current local time + 15m (HH:MM)
     const defH = String(defaultTime.getHours()).padStart(2, '0');
     const defM = String(defaultTime.getMinutes()).padStart(2, '0');
     elements.scheduleTimeOfDay.value = `${defH}:${defM}`;
@@ -1269,7 +1256,7 @@ async function handleConfirmSchedule() {
     if (scheduleType === 'once') {
         const dtVal = elements.scheduleDatetime.value;
         if (!dtVal) {
-            showToast('Please pick a date and time for playback', 'error');
+            showToast('Please select date and time', 'error');
             return;
         }
         scheduledTime = new Date(dtVal).toISOString();
@@ -1280,7 +1267,7 @@ async function handleConfirmSchedule() {
         } else if (scheduleType === 'custom_days') {
             const checkedDays = Array.from(elements.customDaysGroup.querySelectorAll('input:checked')).map(i => i.value);
             if (checkedDays.length === 0) {
-                showToast('Please select at least one day of the week', 'error');
+                showToast('Please select at least one day', 'error');
                 return;
             }
             daysOfWeek = checkedDays.join(',');
@@ -1305,14 +1292,14 @@ async function handleConfirmSchedule() {
 
     try {
         await api.createSchedule(payload);
-        showToast('Playback job scheduled successfully!', 'success');
+        showToast('Playback scheduled successfully', 'success');
         elements.scheduleModal.classList.add('hidden');
         switchView('timeline');
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
         elements.confirmScheduleBtn.disabled = false;
-        elements.confirmScheduleBtn.textContent = '📅 Schedule Job';
+        elements.confirmScheduleBtn.textContent = 'Schedule Job';
     }
 }
 
@@ -1330,13 +1317,13 @@ async function handleInstantPlay() {
         } else {
             await api.playNow([state.selectedMedia.id], autoTurnOff);
         }
-        showToast('Playback started on TV!', 'success');
+        showToast('Playback started on TV', 'success');
         elements.scheduleModal.classList.add('hidden');
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
         elements.instantPlayBtn.disabled = false;
-        elements.instantPlayBtn.textContent = '⚡ Play Now';
+        elements.instantPlayBtn.textContent = 'Play Now';
     }
 }
 
@@ -1373,31 +1360,29 @@ function renderTimeline(jobs) {
     elements.timelineList.innerHTML = jobs.map(job => {
         let scheduleLabel = '';
         if (job.schedule_type === 'daily') {
-            scheduleLabel = `🔄 Daily at ${job.time_of_day || '20:00'}`;
+            scheduleLabel = `Daily at ${job.time_of_day || '20:00'}`;
         } else if (job.schedule_type === 'weekly') {
-            scheduleLabel = `🔄 Weekly (${(job.days_of_week || 'fri').toUpperCase()}) at ${job.time_of_day || '20:00'}`;
+            scheduleLabel = `Weekly (${(job.days_of_week || 'fri').toUpperCase()}) at ${job.time_of_day || '20:00'}`;
         } else if (job.schedule_type === 'custom_days') {
-            scheduleLabel = `🔄 Days: ${(job.days_of_week || '').toUpperCase()} at ${job.time_of_day || '20:00'}`;
+            scheduleLabel = `${(job.days_of_week || '').toUpperCase()} at ${job.time_of_day || '20:00'}`;
         } else {
-            scheduleLabel = `📅 ${formatDateTime(job.scheduled_time)}`;
+            scheduleLabel = formatDateTime(job.scheduled_time);
         }
 
         const isPlaylist = job.target_type === 'playlist' || job.item_type === 'Playlist';
         const isEpisode = job.item_type === 'Episode' || (job.name && job.name.includes(' - S'));
         let timelinePosterHtml = '';
         if (job.image_tag) {
-            timelinePosterHtml = `<img src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+            timelinePosterHtml = `<img class="timeline-poster" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
         } else if (isEpisode) {
             timelinePosterHtml = `<div class="timeline-fallback ep">${escapeHtml(extractEpLabel(job.name))}</div>`;
         } else {
-            timelinePosterHtml = `<div class="timeline-fallback">${isPlaylist ? '📑' : '🎬'}</div>`;
+            timelinePosterHtml = `<div class="timeline-fallback">${isPlaylist ? 'Playlist' : 'Media'}</div>`;
         }
 
         return `
         <div class="timeline-card ${job.status}" data-id="${job.id}">
-            <div class="timeline-poster">
-                ${timelinePosterHtml}
-            </div>
+            ${timelinePosterHtml}
             
             <div class="timeline-details">
                 <div class="timeline-header">
@@ -1407,9 +1392,9 @@ function renderTimeline(jobs) {
                 <div class="timeline-meta">
                     <span class="schedule-time-badge">${scheduleLabel}</span>
                     <span class="type-pill">${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
-                    ${job.auto_turn_off ? `<span class="type-pill" title="Auto-turn off TV after playback">🌙 Auto-sleep</span>` : ''}
+                    ${job.auto_turn_off ? `<span class="type-pill">Auto-sleep</span>` : ''}
                 </div>
-                ${job.error_message ? `<div class="timeline-error">⚠️ ${escapeHtml(job.error_message)}</div>` : ''}
+                ${job.error_message ? `<div style="color: var(--status-danger); font-size: 0.75rem; margin-top: 0.25rem;">${escapeHtml(job.error_message)}</div>` : ''}
             </div>
 
             <div class="timeline-actions">
@@ -1451,7 +1436,7 @@ async function handleConnectTv() {
     const port = elements.tvPortInput.value.trim();
 
     if (!ip) {
-        showToast('Please enter your TV IP address', 'error');
+        showToast('Please enter TV IP address', 'error');
         return;
     }
 
@@ -1462,9 +1447,9 @@ async function handleConnectTv() {
         const res = await api.connectAdb(ip, port);
         renderAdbStatusBox(res);
         if (res.is_ready) {
-            showToast('TV Connected & Authorized!', 'success');
+            showToast('TV Connected & Authorized', 'success');
         } else if (res.state === 'unauthorized') {
-            showToast('Prompt sent to TV screen — please allow USB debugging on your TV', 'warning');
+            showToast('Prompt sent to TV screen — please allow USB debugging', 'warning');
         } else {
             showToast(res.message || 'Cannot reach TV', 'error');
         }
@@ -1473,7 +1458,7 @@ async function handleConnectTv() {
         showToast(err.message, 'error');
     } finally {
         elements.connectTvBtn.disabled = false;
-        elements.connectTvBtn.textContent = '🔗 Connect / Pair TV';
+        elements.connectTvBtn.textContent = 'Connect / Pair TV';
     }
 }
 
@@ -1498,7 +1483,7 @@ async function handleSaveTvSettings() {
 async function handleTestWake() {
     try {
         const res = await api.testWake();
-        showToast(res.message || 'Screen wake command sent', 'success');
+        showToast(res.message || 'Wake command sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1507,7 +1492,7 @@ async function handleTestWake() {
 async function handleTestSleep() {
     try {
         const res = await api.testSleep();
-        showToast(res.message || 'Sleep command sent to TV', 'success');
+        showToast(res.message || 'Sleep command sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1516,7 +1501,7 @@ async function handleTestSleep() {
 async function handleTestLaunchApp() {
     try {
         const res = await api.testLaunch();
-        showToast(res.message || 'Launch Jellyfin command sent', 'success');
+        showToast(res.message || 'Launch Jellyfin sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1543,7 +1528,7 @@ async function handleTestJellyfin() {
         showToast(err.message, 'error');
     } finally {
         elements.testJfBtn.disabled = false;
-        elements.testJfBtn.textContent = '🔍 Test Connection & Fetch Users';
+        elements.testJfBtn.textContent = 'Test Connection & Fetch Users';
     }
 }
 
@@ -1602,18 +1587,16 @@ function switchView(viewName) {
 
 // --- Event Listeners Setup ---
 function setupEventListeners() {
-    // View navigation
     elements.viewTabs.forEach(tab => {
         tab.addEventListener('click', () => switchView(tab.dataset.view));
     });
 
-    // Header buttons
     elements.tvStatusPill.addEventListener('click', () => openSettingsModal('tv-tab'));
     elements.openSettingsBtn.addEventListener('click', () => openSettingsModal('tv-tab'));
     elements.bannerActionBtn.addEventListener('click', () => openSettingsModal('tv-tab'));
     elements.goToLibraryBtn.addEventListener('click', () => switchView('browser'));
 
-    // Fast Responsive Search (No Enter key needed)
+    // Fast Responsive Search (150ms debounce)
     const onSearchInput = debounce(() => {
         const val = elements.searchInput.value.trim();
         elements.clearSearchBtn.classList.toggle('hidden', !val);
@@ -1706,7 +1689,7 @@ function setupEventListeners() {
     elements.playPlaylistNowBtn.addEventListener('click', async () => {
         if (!state.currentPlaylist) return;
         elements.playPlaylistNowBtn.disabled = true;
-        elements.playPlaylistNowBtn.textContent = 'Starting Playback...';
+        elements.playPlaylistNowBtn.textContent = 'Starting...';
         try {
             await api.playPlaylistNow(state.currentPlaylist.id);
             showToast(`Playing playlist "${state.currentPlaylist.name}" on TV!`, 'success');
@@ -1714,7 +1697,7 @@ function setupEventListeners() {
             showToast(e.message, 'error');
         } finally {
             elements.playPlaylistNowBtn.disabled = false;
-            elements.playPlaylistNowBtn.textContent = '⚡ Play on TV Now';
+            elements.playPlaylistNowBtn.textContent = 'Play on TV';
         }
     });
 
