@@ -172,12 +172,28 @@ class ADBClient:
         status = await self.get_detailed_status()
         return status["is_ready"]
 
+    async def is_screen_on(self) -> bool:
+        """Check if TV display is actively awake and turned on."""
+        if not self.tv_address:
+            return False
+        rc, stdout, _ = await self._run_adb(
+            "-s", self.tv_address, "shell", "dumpsys", "power"
+        )
+        if rc == 0:
+            for line in stdout.splitlines():
+                line_lower = line.lower()
+                if "mwakefulness=awake" in line_lower:
+                    return True
+                if "display state: on" in line_lower:
+                    return True
+        return False
+
     async def wake_screen(self) -> bool:
-        """Send KEYCODE_WAKEUP to turn on the TV display."""
+        """Send KEYCODE_WAKEUP (224) to turn on the TV display."""
         if not self.tv_address:
             return False
         rc, stdout, stderr = await self._run_adb(
-            "-s", self.tv_address, "shell", "input", "keyevent", "KEYCODE_WAKEUP"
+            "-s", self.tv_address, "shell", "input", "keyevent", "224"
         )
         if rc == 0:
             logger.info(f"TV screen wake command sent to {self.tv_address}")
@@ -209,36 +225,47 @@ class ADBClient:
         )
         return rc == 0
 
+    async def ensure_awake_and_ready(self) -> bool:
+        """
+        Ensure the TV is powered ON and Jellyfin is running in foreground.
+        Wakes screen if asleep or in standby, presses HOME, and launches Jellyfin.
+        """
+        if not self.tv_address:
+            logger.info("No TV IP configured, skipping ADB screen wake")
+            return True
+            
+        logger.info(f"Checking TV wakefulness and preparing TV at {self.tv_address}...")
+        
+        # 1. Connect if needed
+        if not await self.is_reachable():
+            conn_res = await self.connect()
+            if not conn_res.get("is_ready") and conn_res.get("state") != "unauthorized":
+                logger.warning(f"ADB connect notice: {conn_res.get('message')}")
+                
+        # 2. Check if screen is already on
+        awake = await self.is_screen_on()
+        if not awake:
+            logger.info("TV screen is Asleep/Off. Sending KEYCODE_WAKEUP (224)...")
+            await self.wake_screen()
+            await asyncio.sleep(1.5)
+            
+            # Double check if screen woke up, if still asleep send wakeup again
+            if not await self.is_screen_on():
+                logger.info("Retrying screen wake with KEYCODE_WAKEUP and KEYCODE_HOME...")
+                await self._run_adb("-s", self.tv_address, "shell", "input", "keyevent", "224")
+                await self._run_adb("-s", self.tv_address, "shell", "input", "keyevent", "3")
+                await asyncio.sleep(1.5)
+        else:
+            logger.info("TV screen is already Awake.")
+            
+        # 3. Always bring Jellyfin to foreground
+        logger.info("Ensuring Jellyfin Android TV app is running in foreground...")
+        await self.launch_jellyfin()
+        return True
+
     async def wake_and_prepare(self) -> bool:
         """Full wake-up workflow: connect -> wake -> home -> launch Jellyfin."""
-        if not self.tv_address:
-            logger.warning("No TV address configured for wake_and_prepare")
-            return False
-            
-        logger.info(f"Starting TV wake-up sequence for {self.tv_address}")
-        
-        # Step 1: Connect
-        conn_res = await self.connect()
-        if not conn_res["is_ready"] and conn_res["state"] != "unauthorized":
-            logger.error(f"Failed to connect via ADB: {conn_res['message']}")
-            return False
-            
-        # Step 2: Wake screen
-        await self.wake_screen()
-        await asyncio.sleep(2)
-        
-        # Step 3: Press HOME to reset state
-        await self.send_home()
-        await asyncio.sleep(1)
-        
-        # Step 4: Launch Jellyfin
-        launched = await self.launch_jellyfin()
-        if not launched:
-            logger.warning("Failed to launch Jellyfin app via ADB")
-            return False
-            
-        logger.info("TV wake-up sequence completed successfully")
-        return True
+        return await self.ensure_awake_and_ready()
 
     async def turn_off_tv(self) -> bool:
         """Gracefully put TV to sleep / standby mode after playback finishes."""

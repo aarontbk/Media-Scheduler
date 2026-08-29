@@ -159,25 +159,30 @@ async def execute_playback(
             )
             await session.commit()
         
-        # Try to find the TV session
+        # 1. ALWAYS ensure the TV screen is awake/on and Jellyfin is in the foreground
+        if cfg.get("tv_ip"):
+            logger.info(f"Ensuring TV screen is powered ON and Jellyfin is running at {cfg['tv_ip']}...")
+            try:
+                await adb.ensure_awake_and_ready()
+            except Exception as e:
+                logger.warning(f"ADB wake error (continuing playback): {e}")
+
+        # 2. Find or poll for active Jellyfin TV session
+        logger.info("Locating Jellyfin TV session...")
         tv_session = await jellyfin.find_tv_session()
-        
         if not tv_session:
-            # Wake TV via ADB
-            logger.info("TV session not found. Attempting automated ADB wake-up...")
-            await adb.wake_and_prepare()
-            
-            # Poll for Jellyfin Android TV client to connect to server (up to 30 seconds)
-            logger.info("Waiting up to 30 seconds for TV Jellyfin app to register...")
+            logger.info("Polling for Jellyfin TV session to become available (up to 30 seconds)...")
             for attempt in range(10):
-                await asyncio.sleep(3)
+                await asyncio.sleep(2.5)
                 tv_session = await jellyfin.find_tv_session()
                 if tv_session:
-                    logger.info(f"TV session found on attempt {attempt+1}: {tv_session['id']} ({tv_session['device_name']})")
+                    logger.info(f"TV session established on attempt {attempt+1}: {tv_session['id']} ({tv_session['device_name']})")
                     break
             
             if not tv_session:
-                raise RuntimeError("Could not establish TV session after wake-up attempt")
+                raise RuntimeError("Could not establish TV session after waking screen")
+        else:
+            logger.info(f"Using TV session: {tv_session['id']} ({tv_session['device_name']})")
         
         # Send play command
         logger.info(f"Starting playback of {len(item_ids)} item(s) on session {tv_session['id']} ({tv_session['device_name']})")

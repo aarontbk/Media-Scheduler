@@ -635,17 +635,27 @@ async def delete_schedule(job_id: str, db: AsyncSession = Depends(get_db)):
 @app.post("/api/play-now", status_code=200)
 async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
     """Immediately play items on the TV."""
-    jellyfin, adb, _ = await get_clients(db)
+    jellyfin, adb, cfg = await get_clients(db)
+    
+    if cfg.get("tv_ip"):
+        logger.info(f"Ensuring TV screen is powered ON and Jellyfin is running at {cfg['tv_ip']}...")
+        try:
+            await adb.ensure_awake_and_ready()
+        except Exception as e:
+            logger.warning(f"ADB wake error (continuing playback): {e}")
+
     tv_session = await jellyfin.find_tv_session()
     if not tv_session:
-        logger.info("TV session not found, initiating ADB wake-up...")
-        await adb.wake_and_prepare()
-        await asyncio.sleep(10)
-        tv_session = await jellyfin.find_tv_session()
+        logger.info("Polling for Jellyfin TV session to become available...")
+        for _ in range(8):
+            await asyncio.sleep(2.5)
+            tv_session = await jellyfin.find_tv_session()
+            if tv_session:
+                break
         if not tv_session:
             raise HTTPException(
                 status_code=503,
-                detail="TV session not found after wake-up attempt."
+                detail="TV session not found after waking TV."
             )
             
     success = await jellyfin.play_on_session(tv_session["id"], data.item_ids)
