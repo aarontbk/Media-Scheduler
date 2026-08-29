@@ -1,10 +1,11 @@
 import logging
 import httpx
 from app.config import get_settings
+from app.media_provider import BaseMediaProvider
 
 logger = logging.getLogger(__name__)
 
-class JellyfinClient:
+class JellyfinClient(BaseMediaProvider):
     """Client for interacting with the Jellyfin REST API."""
     def __init__(self, base_url: str | None = None, api_key: str | None = None, user_id: str | None = None, tv_device_name: str | None = None):
         settings = get_settings()

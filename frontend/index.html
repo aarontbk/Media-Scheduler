@@ -412,90 +412,179 @@
 
             <!-- Segmented Settings Tabs -->
             <div class="flex border-b border-white/[0.08] bg-[#090a0f]">
-                <button class="settings-tab active flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="tv-tab">Android TV (ADB)</button>
-                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="jellyfin-tab">Jellyfin Server</button>
-                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="system-tab">Timezone & Clock</button>
+                <button class="settings-tab active flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="tv-tab">TV Controller</button>
+                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="media-tab">Media Server</button>
+                <button class="settings-tab flex-1 py-2.5 text-xs font-medium text-slate-400 hover:text-white border-b-2 border-transparent transition" data-tab="system-tab">Timezone &amp; Clock</button>
             </div>
 
             <div class="p-5 flex-1">
                 
-                <!-- TAB 1: Android TV -->
+                <!-- TAB 1: TV Controller -->
                 <div class="settings-panel active space-y-4" id="tv-tab">
-                    
-                    <div class="bg-[#090a0f] border border-white/[0.08] rounded-lg p-3.5 space-y-2" id="adbStatusBox">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-slate-500 status-led" id="adbBoxDot"></span>
-                                <strong class="text-xs text-white" id="adbBoxTitle">Checking TV Status...</strong>
+                    <!-- TV Type Toggle -->
+                    <div class="space-y-2">
+                        <label class="block text-xs font-medium text-slate-300">TV Type</label>
+                        <div class="flex gap-2">
+                            <button id="tvTypeAndroid" class="tv-type-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition" data-type="android">Android TV (ADB)</button>
+                            <button id="tvTypeSamsung" class="tv-type-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition" data-type="samsung">Samsung (Tizen)</button>
+                        </div>
+                    </div>
+
+                    <!-- Android TV Sub-panel -->
+                    <div id="androidTvPanel" class="space-y-4">
+                        <div class="bg-[#090a0f] border border-white/[0.08] rounded-lg p-3.5 space-y-2" id="adbStatusBox">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-slate-500 status-led" id="adbBoxDot"></span>
+                                    <strong class="text-xs text-white" id="adbBoxTitle">Checking TV Status...</strong>
+                                </div>
+                                <button class="px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-[11px] font-medium rounded border border-white/[0.08] transition" id="refreshAdbStatusBtn">Check</button>
                             </div>
-                            <button class="px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-[11px] font-medium rounded border border-white/[0.08] transition" id="refreshAdbStatusBtn">Check</button>
+                            <p class="text-xs text-slate-400" id="adbBoxMessage">Connecting to TV...</p>
+                            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200 space-y-2 hidden" id="tvPromptCallout">
+                                <strong>Authorization Required:</strong>
+                                <p class="text-slate-300">A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV. Check <em>"Always allow"</em> and press OK.</p>
+                                <button class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded text-xs transition" id="verifyAuthBtn">Verify Authorization</button>
+                            </div>
                         </div>
-                        <p class="text-xs text-slate-400" id="adbBoxMessage">Connecting to TV...</p>
 
-                        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200 space-y-2 hidden" id="tvPromptCallout">
-                            <strong>Authorization Required:</strong>
-                            <p class="text-slate-300">A dialog asking <em>"Allow USB debugging?"</em> has appeared on your TV. Check <em>"Always allow"</em> and press OK.</p>
-                            <button class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded text-xs transition" id="verifyAuthBtn">Verify Authorization</button>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1 col-span-2 sm:col-span-1">
+                                <label class="block text-xs font-medium text-slate-300" for="tvIpInput">TV IP Address</label>
+                                <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
+                            </div>
+                            <div class="space-y-1 col-span-2 sm:col-span-1">
+                                <label class="block text-xs font-medium text-slate-300" for="tvPortInput">ADB Port</label>
+                                <input type="number" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvPortInput" value="5555">
+                            </div>
+                            <div class="space-y-1 col-span-2">
+                                <label class="block text-xs font-medium text-slate-300" for="tvNameInput">TV Device Name (in media server)</label>
+                                <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvNameInput" placeholder="e.g. Living Room TV">
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="connectTvBtn">Connect / Pair TV</button>
+                            <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="saveTvSettingsBtn">Save Settings</button>
+                        </div>
+
+                        <div class="pt-3 border-t border-white/[0.08] space-y-2">
+                            <h4 class="text-xs font-medium text-slate-400">Test Android TV Controls:</h4>
+                            <div class="flex flex-wrap gap-2">
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testWakeBtn">Screen Wake</button>
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testLaunchAppBtn">Launch App</button>
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testSleepBtn">Standby / Sleep</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="space-y-1 col-span-2 sm:col-span-1">
-                            <label class="block text-xs font-medium text-slate-300" for="tvIpInput">TV IP Address</label>
-                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvIpInput" placeholder="e.g. 192.168.1.100" autocomplete="off">
+                    <!-- Samsung TV Sub-panel -->
+                    <div id="samsungTvPanel" class="space-y-4 hidden">
+                        <div class="bg-[#090a0f] border border-white/[0.08] rounded-lg p-3.5 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-slate-500 status-led" id="samsungStatusDot"></span>
+                                    <strong class="text-xs text-white" id="samsungStatusTitle">Samsung TV Status</strong>
+                                </div>
+                                <button class="px-2 py-1 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-[11px] font-medium rounded border border-white/[0.08] transition" id="refreshSamsungStatusBtn">Check</button>
+                            </div>
+                            <p class="text-xs text-slate-400" id="samsungStatusMessage">Enter IP address below and click Check.</p>
                         </div>
 
-                        <div class="space-y-1 col-span-2 sm:col-span-1">
-                            <label class="block text-xs font-medium text-slate-300" for="tvPortInput">ADB Port</label>
-                            <input type="number" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvPortInput" value="5555">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1 col-span-2 sm:col-span-1">
+                                <label class="block text-xs font-medium text-slate-300" for="samsungIpInput">TV IP Address</label>
+                                <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="samsungIpInput" placeholder="e.g. 192.168.1.101" autocomplete="off">
+                            </div>
+                            <div class="space-y-1 col-span-2 sm:col-span-1">
+                                <label class="block text-xs font-medium text-slate-300" for="samsungMacInput">MAC Address (for WoL)</label>
+                                <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="samsungMacInput" placeholder="AA:BB:CC:DD:EE:FF">
+                            </div>
+                            <div class="space-y-1 col-span-2">
+                                <label class="block text-xs font-medium text-slate-300" for="samsungAppSelect">App to Launch</label>
+                                <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="samsungAppSelect">
+                                    <option value="3201807016499">Jellyfin</option>
+                                    <option value="3201512006785">Plex</option>
+                                    <option value="11101200001">Netflix</option>
+                                    <option value="111299001912">YouTube</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div class="space-y-1 col-span-2">
-                            <label class="block text-xs font-medium text-slate-300" for="tvNameInput">TV Device Name (in Jellyfin)</label>
-                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="tvNameInput" placeholder="e.g. Living Room TV">
+                        <div class="flex gap-2">
+                            <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="saveSamsungSettingsBtn">Save Settings</button>
                         </div>
-                    </div>
 
-                    <div class="flex gap-2">
-                        <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="connectTvBtn">Connect / Pair TV</button>
-                        <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="saveTvSettingsBtn">Save Settings</button>
-                    </div>
-
-                    <div class="pt-3 border-t border-white/[0.08] space-y-2">
-                        <h4 class="text-xs font-medium text-slate-400">Test TV Remote Controls:</h4>
-                        <div class="flex flex-wrap gap-2">
-                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testWakeBtn">Screen Wake</button>
-                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testLaunchAppBtn">Launch Jellyfin</button>
-                            <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="testSleepBtn">Standby / Sleep</button>
+                        <div class="pt-3 border-t border-white/[0.08] space-y-2">
+                            <h4 class="text-xs font-medium text-slate-400">Test Samsung TV Controls:</h4>
+                            <div class="flex flex-wrap gap-2">
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="samsungWakeBtn">Wake (WoL + Power)</button>
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="samsungLaunchBtn">Launch App</button>
+                                <button class="px-2.5 py-1 bg-[#090a0f] hover:bg-[#161922] border border-white/[0.08] rounded text-xs text-slate-300" id="samsungSleepBtn">Standby (Power Key)</button>
+                            </div>
+                            <p class="text-[11px] text-slate-500">First pairing: click Wake — a prompt appears on your TV. Accept it to authorize.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- TAB 2: Jellyfin Server -->
-                <div class="settings-panel hidden space-y-4" id="jellyfin-tab">
-                    <div class="space-y-1">
-                        <label class="block text-xs font-medium text-slate-300" for="jfUrlInput">Jellyfin Server URL</label>
-                        <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUrlInput" placeholder="http://media:8096">
+                <!-- TAB 2: Media Server -->
+                <div class="settings-panel hidden space-y-4" id="media-tab">
+                    <!-- Provider Toggle -->
+                    <div class="space-y-2">
+                        <label class="block text-xs font-medium text-slate-300">Media Server</label>
+                        <div class="flex gap-2">
+                            <button id="mediaProviderJellyfin" class="media-provider-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition" data-provider="jellyfin">Jellyfin</button>
+                            <button id="mediaProviderPlex" class="media-provider-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition" data-provider="plex">Plex</button>
+                        </div>
                     </div>
 
-                    <div class="space-y-1">
-                        <label class="block text-xs font-medium text-slate-300" for="jfKeyInput">Jellyfin API Key</label>
-                        <input type="password" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfKeyInput" placeholder="Enter API Key">
+                    <!-- Jellyfin Sub-panel -->
+                    <div id="jellyfinPanel" class="space-y-4">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-300" for="jfUrlInput">Jellyfin Server URL</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUrlInput" placeholder="http://media:8096">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-300" for="jfKeyInput">Jellyfin API Key</label>
+                            <input type="password" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfKeyInput" placeholder="Enter API Key">
+                        </div>
+                        <div>
+                            <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="testJfBtn">Test Connection &amp; Fetch Profiles</button>
+                        </div>
+                        <div class="space-y-1 pt-2">
+                            <label class="block text-xs font-medium text-slate-300" for="jfUserSelect">Target User Profile</label>
+                            <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUserSelect">
+                                <option value="">-- Test Connection to load user profiles --</option>
+                            </select>
+                        </div>
+                        <div class="pt-2">
+                            <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
+                        </div>
                     </div>
 
-                    <div>
-                        <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="testJfBtn">Test Connection & Fetch Profiles</button>
-                    </div>
-
-                    <div class="space-y-1 pt-2">
-                        <label class="block text-xs font-medium text-slate-300" for="jfUserSelect">Target User Profile</label>
-                        <select class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="jfUserSelect">
-                            <option value="">-- Test Connection to load user profiles --</option>
-                        </select>
-                    </div>
-
-                    <div class="pt-2">
-                        <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="saveJfSettingsBtn">Save Jellyfin Settings</button>
+                    <!-- Plex Sub-panel -->
+                    <div id="plexPanel" class="space-y-4 hidden">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-300" for="plexUrlInput">Plex Server URL</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="plexUrlInput" placeholder="http://192.168.1.10:32400">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-xs font-medium text-slate-300" for="plexTokenInput">Plex Token</label>
+                            <input type="password" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="plexTokenInput" placeholder="Your X-Plex-Token">
+                            <span class="text-[11px] text-slate-500">Find your token: Plex Web → any media item → View XML → X-Plex-Token in the URL.</span>
+                        </div>
+                        <div>
+                            <button class="px-3.5 py-1.5 bg-[#1a1d27] hover:bg-[#222634] text-slate-300 text-xs font-medium rounded-md border border-white/[0.08] transition" id="testPlexBtn">Test Plex Connection</button>
+                        </div>
+                        <div id="plexTestResult" class="hidden text-xs text-slate-400 p-3 bg-[#090a0f] rounded-md border border-white/[0.08]"></div>
+                        <div class="space-y-1 pt-2">
+                            <label class="block text-xs font-medium text-slate-300" for="plexPlayerIpInput">Plex Player IP (TV/Player device)</label>
+                            <input type="text" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="plexPlayerIpInput" placeholder="e.g. 192.168.1.176 (TV's IP)">
+                            <span class="text-[11px] text-slate-500">IP of the device running the Plex player app used for Companion playback commands.</span>
+                        </div>
+                        <div class="pt-2">
+                            <button class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" id="savePlexSettingsBtn">Save Plex Settings</button>
+                        </div>
                     </div>
                 </div>
 
@@ -536,9 +625,11 @@
         </div>
     </div>
 
+
     <!-- Toast Notification Container -->
     <div class="toast-container fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none" id="toastContainer"></div>
 
     <script src="/static/app.js"></script>
 </body>
 </html>
+

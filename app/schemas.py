@@ -160,26 +160,90 @@ class JellyfinTestResponse(BaseModel):
     users: list[JellyfinUser] = []
     error: str | None = None
 
+# --- Plex Schemas ---
+class PlexLibrary(BaseModel):
+    key: str
+    title: str
+    type: str
+
+class PlexTestResponse(BaseModel):
+    connected: bool
+    server_name: str | None = None
+    version: str | None = None
+    libraries: list[PlexLibrary] = []
+    error: str | None = None
+
+# --- Samsung TV Schemas ---
+class SamsungTVStatus(BaseModel):
+    state: str  # "on", "standby", "offline", "not_configured", "error"
+    is_ready: bool = False
+    message: str = ""
+    configured_ip: str = ""
+    configured_mac: str = ""
+    device_name: str | None = None
+    model: str | None = None
+    token: str | None = None
+
+class SamsungWakeRequest(BaseModel):
+    ip: str | None = None
+    mac: str | None = None
+
+class SamsungLaunchRequest(BaseModel):
+    app_id: str | None = None
+
+class SamsungKeyRequest(BaseModel):
+    key: str
+
+# --- Settings ---
 class SettingsUpdate(BaseModel):
+    # Jellyfin
     jellyfin_url: str | None = None
     jellyfin_api_key: str | None = None
     jellyfin_user_id: str | None = None
+    # Android TV
     tv_device_name: str | None = None
     tv_ip: str | None = None
     adb_port: int | None = 5555
+    # Plex
+    plex_url: str | None = None
+    plex_token: str | None = None
+    plex_client_id: str | None = None
+    plex_player_ip: str | None = None
+    # Samsung TV
+    samsung_tv_ip: str | None = None
+    samsung_tv_mac: str | None = None
+    samsung_app_id: str | None = None
+    samsung_ws_token: str | None = None
+    # Provider selection
+    media_provider: str | None = None   # "jellyfin" | "plex"
+    tv_type: str | None = None          # "android" | "samsung"
 
 class SettingsResponse(BaseModel):
+    # Jellyfin
     jellyfin_url: str
     jellyfin_api_key: str
     jellyfin_user_id: str
+    jellyfin_connected: bool = False
+    jellyfin_users: list[JellyfinUser] = []
+    # Android TV
     tv_device_name: str
     tv_ip: str
     adb_port: int
-    jellyfin_connected: bool = False
-    jellyfin_users: list[JellyfinUser] = []
     adb_state: str = "offline"
     adb_is_ready: bool = False
     adb_message: str = ""
+    # Plex
+    plex_url: str = ""
+    plex_token: str = ""
+    plex_client_id: str = ""
+    plex_player_ip: str = ""
+    # Samsung TV
+    samsung_tv_ip: str = ""
+    samsung_tv_mac: str = ""
+    samsung_app_id: str = ""
+    # Provider selection
+    media_provider: str = "jellyfin"
+    tv_type: str = "android"
 
 # --- Play Now ---
 class PlayNowRequest(BaseModel):

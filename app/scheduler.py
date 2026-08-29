@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import get_settings, get_active_settings
 from app.database import AsyncSessionLocal
 from app.models import ScheduledJob, Playlist, PlaylistItem
-from app.jellyfin_client import JellyfinClient
-from app.adb_client import ADBClient
+from app.media_provider import BaseMediaProvider
+from app.tv_controller import BaseTVController
+from app.provider_factory import get_media_provider, get_tv_controller
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,8 @@ async def monitor_playback_and_turn_off(
     session_id: str,
     item_ids: list[str],
     total_seconds: int,
-    adb: ADBClient,
-    jellyfin: JellyfinClient,
+    adb: BaseTVController,
+    jellyfin: BaseMediaProvider,
     job_db_id: str,
 ) -> None:
     """
@@ -141,13 +142,8 @@ async def execute_playback(
         else:
             item_ids = [target_id]
             
-    jellyfin = JellyfinClient(
-        base_url=cfg["jellyfin_url"],
-        api_key=cfg["jellyfin_api_key"],
-        user_id=cfg["jellyfin_user_id"],
-        tv_device_name=cfg["tv_device_name"],
-    )
-    adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
+    jellyfin = get_media_provider(cfg)
+    adb = get_tv_controller(cfg)
     
     try:
         # Update status to running
@@ -159,36 +155,37 @@ async def execute_playback(
             )
             await session.commit()
         
-        # 1. ALWAYS ensure the TV screen is awake/on and Jellyfin is in the foreground
-        if cfg.get("tv_ip"):
-            logger.info(f"Ensuring TV screen is powered ON and Jellyfin is running at {cfg['tv_ip']}...")
+        # 1. ALWAYS ensure the TV screen is awake/on and media app is in the foreground
+        tv_ip_hint = cfg.get("tv_ip") or cfg.get("samsung_tv_ip")
+        if tv_ip_hint:
+            logger.info(f"Ensuring TV is powered ON at {tv_ip_hint}...")
             try:
                 await adb.ensure_awake_and_ready()
             except Exception as e:
-                logger.warning(f"ADB wake error (continuing playback): {e}")
+                logger.warning(f"TV wake error (continuing playback anyway): {e}")
 
-        # 2. Find or poll for active Jellyfin TV session
-        logger.info("Locating Jellyfin TV session...")
+        # 2. Find or poll for active media player session
+        logger.info("Locating media player session...")
         tv_session = await jellyfin.find_tv_session()
         if not tv_session:
-            logger.info("Polling for Jellyfin TV session to become available (up to 30 seconds)...")
+            logger.info("Polling for media player session to become available (up to 30 seconds)...")
             for attempt in range(10):
                 await asyncio.sleep(2.5)
                 tv_session = await jellyfin.find_tv_session()
                 if tv_session:
-                    logger.info(f"TV session established on attempt {attempt+1}: {tv_session['id']} ({tv_session['device_name']})")
+                    logger.info(f"Player session established on attempt {attempt+1}: {tv_session['id']} ({tv_session['device_name']})")
                     break
             
             if not tv_session:
-                raise RuntimeError("Could not establish TV session after waking screen")
+                raise RuntimeError("Could not establish player session after waking TV")
         else:
-            logger.info(f"Using TV session: {tv_session['id']} ({tv_session['device_name']})")
+            logger.info(f"Using player session: {tv_session['id']} ({tv_session['device_name']})")
         
         # Send play command
         logger.info(f"Starting playback of {len(item_ids)} item(s) on session {tv_session['id']} ({tv_session['device_name']})")
         success = await jellyfin.play_on_session(tv_session["id"], item_ids)
         if not success:
-            raise RuntimeError("Jellyfin PlayNow command failed")
+            raise RuntimeError("Playback command failed")
             
         logger.info(f"Playback started successfully for job {job_db_id}")
         

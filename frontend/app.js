@@ -17,6 +17,15 @@ const state = {
         tv_device_name: '',
         tv_ip: '',
         adb_port: 5555,
+        plex_url: '',
+        plex_token: '',
+        plex_client_id: '',
+        plex_player_ip: '',
+        samsung_tv_ip: '',
+        samsung_tv_mac: '',
+        samsung_app_id: '3201807016499',
+        media_provider: 'jellyfin',
+        tv_type: 'android',
         app_timezone: 'Asia/Jerusalem',
         jellyfin_connected: false,
         adb_is_ready: false,
@@ -136,7 +145,14 @@ const elements = {
     settingsTabs: document.querySelectorAll('.settings-tab'),
     settingsPanels: document.querySelectorAll('.settings-panel'),
     
-    // TV Setup Fields
+    // TV Type Selection
+    tvTypeButtons: document.querySelectorAll('.tv-type-btn'),
+    tvTypeAndroid: document.getElementById('tvTypeAndroid'),
+    tvTypeSamsung: document.getElementById('tvTypeSamsung'),
+    androidTvPanel: document.getElementById('androidTvPanel'),
+    samsungTvPanel: document.getElementById('samsungTvPanel'),
+
+    // Android TV Setup Fields
     adbBoxDot: document.getElementById('adbBoxDot'),
     adbBoxTitle: document.getElementById('adbBoxTitle'),
     adbBoxMessage: document.getElementById('adbBoxMessage'),
@@ -152,12 +168,40 @@ const elements = {
     testLaunchAppBtn: document.getElementById('testLaunchAppBtn'),
     testSleepBtn: document.getElementById('testSleepBtn'),
 
+    // Samsung TV Setup Fields
+    samsungStatusDot: document.getElementById('samsungStatusDot'),
+    samsungStatusTitle: document.getElementById('samsungStatusTitle'),
+    samsungStatusMessage: document.getElementById('samsungStatusMessage'),
+    refreshSamsungStatusBtn: document.getElementById('refreshSamsungStatusBtn'),
+    samsungIpInput: document.getElementById('samsungIpInput'),
+    samsungMacInput: document.getElementById('samsungMacInput'),
+    samsungAppSelect: document.getElementById('samsungAppSelect'),
+    saveSamsungSettingsBtn: document.getElementById('saveSamsungSettingsBtn'),
+    samsungWakeBtn: document.getElementById('samsungWakeBtn'),
+    samsungLaunchBtn: document.getElementById('samsungLaunchBtn'),
+    samsungSleepBtn: document.getElementById('samsungSleepBtn'),
+
+    // Media Provider Selection
+    mediaProviderButtons: document.querySelectorAll('.media-provider-btn'),
+    mediaProviderJellyfin: document.getElementById('mediaProviderJellyfin'),
+    mediaProviderPlex: document.getElementById('mediaProviderPlex'),
+    jellyfinPanel: document.getElementById('jellyfinPanel'),
+    plexPanel: document.getElementById('plexPanel'),
+
     // Jellyfin Setup Fields
     jfUrlInput: document.getElementById('jfUrlInput'),
     jfKeyInput: document.getElementById('jfKeyInput'),
     jfUserSelect: document.getElementById('jfUserSelect'),
     testJfBtn: document.getElementById('testJfBtn'),
     saveJfSettingsBtn: document.getElementById('saveJfSettingsBtn'),
+
+    // Plex Setup Fields
+    plexUrlInput: document.getElementById('plexUrlInput'),
+    plexTokenInput: document.getElementById('plexTokenInput'),
+    testPlexBtn: document.getElementById('testPlexBtn'),
+    plexTestResult: document.getElementById('plexTestResult'),
+    plexPlayerIpInput: document.getElementById('plexPlayerIpInput'),
+    savePlexSettingsBtn: document.getElementById('savePlexSettingsBtn'),
 
     // Timezone Setup Fields
     timezoneSelect: document.getElementById('timezoneSelect'),
@@ -266,9 +310,64 @@ const api = {
         return await res.json();
     },
 
+    async testPlex(url, token) {
+        let endpoint = '/api/plex/test';
+        const params = new URLSearchParams();
+        if (url) params.append('url', url);
+        if (token) params.append('token', token);
+        if (params.toString()) endpoint += `?${params.toString()}`;
+        const res = await fetch(endpoint);
+        return await res.json();
+    },
+
     async getTvStatus() {
         const res = await fetch('/api/tv/status');
         if (!res.ok) throw new Error('Failed to check TV status');
+        return await res.json();
+    },
+
+    async getSamsungStatus() {
+        const res = await fetch('/api/tv/samsung/status');
+        if (!res.ok) throw new Error('Failed to check Samsung TV status');
+        return await res.json();
+    },
+
+    async wakeSamsung(ip, mac) {
+        const res = await fetch('/api/tv/samsung/wake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, mac }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Samsung wake failed');
+        }
+        return await res.json();
+    },
+
+    async launchSamsungApp(appId) {
+        const res = await fetch('/api/tv/samsung/launch-app', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app_id: appId }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Samsung launch app failed');
+        }
+        return await res.json();
+    },
+
+    async sendSamsungKey(key) {
+        const res = await fetch('/api/tv/samsung/key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Samsung key event failed');
+        }
         return await res.json();
     },
 
@@ -311,6 +410,7 @@ const api = {
         }
         return await res.json();
     },
+
 
     async fetchMedia(query = '', type = 'Movie,Series', category = '') {
         const params = new URLSearchParams();
@@ -474,11 +574,28 @@ async function loadInitialSettings() {
         const settings = await api.getSettings();
         state.settings = settings;
         
+        // Android TV Settings
         elements.tvIpInput.value = settings.tv_ip || '';
         elements.tvPortInput.value = settings.adb_port || 5555;
         elements.tvNameInput.value = settings.tv_device_name || '';
+        
+        // Samsung TV Settings
+        if (elements.samsungIpInput) elements.samsungIpInput.value = settings.samsung_tv_ip || '';
+        if (elements.samsungMacInput) elements.samsungMacInput.value = settings.samsung_tv_mac || '';
+        if (elements.samsungAppSelect && settings.samsung_app_id) elements.samsungAppSelect.value = settings.samsung_app_id;
+
+        // TV Type Switch
+        switchTvType(settings.tv_type || 'android');
+
+        // Media Server Settings
         elements.jfUrlInput.value = settings.jellyfin_url || '';
         elements.jfKeyInput.value = settings.jellyfin_api_key || '';
+        if (elements.plexUrlInput) elements.plexUrlInput.value = settings.plex_url || '';
+        if (elements.plexTokenInput) elements.plexTokenInput.value = settings.plex_token || '';
+        if (elements.plexPlayerIpInput) elements.plexPlayerIpInput.value = settings.plex_player_ip || '';
+
+        // Media Provider Switch
+        switchMediaProvider(settings.media_provider || 'jellyfin');
 
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
         elements.browserTzHint.textContent = `Detected browser timezone: ${browserTz}`;
@@ -534,22 +651,44 @@ async function updateTvStatusUI() {
             elements.headerStatusLabel.textContent = 'TV Offline';
         }
 
-        if (!status.configured_tv_ip || !state.settings.jellyfin_api_key) {
+        const isSamsung = (state.settings.tv_type === 'samsung');
+        const tvConfigured = isSamsung ? !!state.settings.samsung_tv_ip : !!status.configured_tv_ip;
+        const isPlex = (state.settings.media_provider === 'plex');
+        const mediaConfigured = isPlex ? (!!state.settings.plex_url && !!state.settings.plex_token) : !!state.settings.jellyfin_api_key;
+
+        if (!tvConfigured || !mediaConfigured) {
             elements.setupBanner.classList.remove('hidden');
-            if (!status.configured_tv_ip) {
-                elements.bannerMsg.textContent = 'Enter your TV IP address in Settings to enable automated wake-up.';
+            if (!tvConfigured) {
+                elements.bannerMsg.textContent = isSamsung 
+                    ? 'Enter your Samsung TV IP address in Settings to enable automated wake-up.'
+                    : 'Enter your TV IP address in Settings to enable automated wake-up.';
             } else {
-                elements.bannerMsg.textContent = 'Configure your Jellyfin API key to load your media library.';
+                elements.bannerMsg.textContent = isPlex
+                    ? 'Configure your Plex Server URL & Token to load your media library.'
+                    : 'Configure your Jellyfin API key to load your media library.';
             }
         } else {
             elements.setupBanner.classList.add('hidden');
         }
 
         renderAdbStatusBox(status);
+
+        // Also fetch Samsung TV status if Samsung TV is selected
+        if (isSamsung && state.settings.samsung_tv_ip) {
+            api.getSamsungStatus().then(renderSamsungStatusBox).catch(() => {});
+        }
     } catch (err) {
         elements.headerStatusDot.className = 'w-2 h-2 rounded-full status-led offline';
         elements.headerStatusLabel.textContent = 'Server Offline';
     }
+}
+
+function renderSamsungStatusBox(status) {
+    if (!elements.samsungStatusDot) return;
+    const st = status.state || 'offline';
+    elements.samsungStatusDot.className = `w-2 h-2 rounded-full status-led ${status.is_ready ? 'connected' : (st === 'standby' ? 'partial' : 'offline')}`;
+    elements.samsungStatusTitle.textContent = status.device_name ? `Samsung TV (${status.device_name})` : 'Samsung TV Status';
+    elements.samsungStatusMessage.textContent = status.message || (status.is_ready ? 'Samsung TV is reachable.' : 'Samsung TV is offline or unreachable.');
 }
 
 function renderAdbStatusBox(status) {
@@ -579,6 +718,7 @@ function renderAdbStatusBox(status) {
     }
 }
 
+
 function populateUsersDropdown(users, selectedId) {
     elements.jfUserSelect.innerHTML = users.map(u => `
         <option value="${u.id}" ${u.id === selectedId ? 'selected' : ''}>
@@ -605,7 +745,7 @@ async function loadLibraryMedia() {
             <div class="empty-state py-16 text-center text-slate-400 space-y-3">
                 <h3 class="text-sm font-semibold text-white">Failed to Load Library</h3>
                 <p class="text-xs max-w-sm mx-auto">${escapeHtml(err.message)}</p>
-                <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" onclick="openSettingsModal('jellyfin-tab')">Check Jellyfin Settings</button>
+                <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition" onclick="openSettingsModal('media-tab')">Check Media Server Settings</button>
             </div>
         `;
     }
@@ -1532,6 +1672,32 @@ function switchSettingsTab(tabName) {
     });
 }
 
+function switchTvType(type) {
+    state.settings.tv_type = type;
+    const isAndroid = type === 'android';
+    if (elements.tvTypeAndroid && elements.tvTypeSamsung) {
+        elements.tvTypeAndroid.className = `tv-type-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition ${isAndroid ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#090a0f] border-white/[0.08] text-slate-400 hover:text-white'}`;
+        elements.tvTypeSamsung.className = `tv-type-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition ${!isAndroid ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#090a0f] border-white/[0.08] text-slate-400 hover:text-white'}`;
+    }
+    if (elements.androidTvPanel && elements.samsungTvPanel) {
+        elements.androidTvPanel.classList.toggle('hidden', !isAndroid);
+        elements.samsungTvPanel.classList.toggle('hidden', isAndroid);
+    }
+}
+
+function switchMediaProvider(provider) {
+    state.settings.media_provider = provider;
+    const isJf = provider === 'jellyfin';
+    if (elements.mediaProviderJellyfin && elements.mediaProviderPlex) {
+        elements.mediaProviderJellyfin.className = `media-provider-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition ${isJf ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#090a0f] border-white/[0.08] text-slate-400 hover:text-white'}`;
+        elements.mediaProviderPlex.className = `media-provider-btn flex-1 py-1.5 text-xs font-medium rounded-md border transition ${!isJf ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#090a0f] border-white/[0.08] text-slate-400 hover:text-white'}`;
+    }
+    if (elements.jellyfinPanel && elements.plexPanel) {
+        elements.jellyfinPanel.classList.toggle('hidden', !isJf);
+        elements.plexPanel.classList.toggle('hidden', isJf);
+    }
+}
+
 async function handleConnectTv() {
     const ip = elements.tvIpInput.value.trim();
     const port = elements.tvPortInput.value.trim();
@@ -1570,12 +1736,68 @@ async function handleSaveTvSettings() {
 
     try {
         await api.saveSettings({
+            tv_type: 'android',
             tv_ip: ip,
             adb_port: port,
             tv_device_name: name,
         });
-        showToast('TV settings saved', 'success');
+        state.settings.tv_type = 'android';
+        showToast('Android TV settings saved', 'success');
         updateTvStatusUI();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function handleSaveSamsungSettings() {
+    const ip = elements.samsungIpInput.value.trim();
+    const mac = elements.samsungMacInput.value.trim();
+    const appId = elements.samsungAppSelect.value;
+    try {
+        await api.saveSettings({
+            tv_type: 'samsung',
+            samsung_tv_ip: ip,
+            samsung_tv_mac: mac,
+            samsung_app_id: appId,
+        });
+        state.settings.tv_type = 'samsung';
+        state.settings.samsung_tv_ip = ip;
+        state.settings.samsung_tv_mac = mac;
+        state.settings.samsung_app_id = appId;
+        showToast('Samsung TV settings saved', 'success');
+        updateTvStatusUI();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function handleSamsungWake() {
+    const ip = elements.samsungIpInput.value.trim();
+    const mac = elements.samsungMacInput.value.trim();
+    try {
+        const res = await api.wakeSamsung(ip, mac);
+        showToast(res.message || 'Wake command sent to Samsung TV', 'success');
+        setTimeout(updateTvStatusUI, 3000);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function handleSamsungLaunch() {
+    const appId = elements.samsungAppSelect.value;
+    try {
+        const res = await api.launchSamsungApp(appId);
+        showToast(res.message || 'App launch command sent to Samsung TV', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function handleSamsungSleep() {
+    try {
+        const res = await api.sendSamsungKey('KEY_POWER');
+        showToast(res.message || 'Standby command sent to Samsung TV', 'success');
+        setTimeout(updateTvStatusUI, 2000);
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1602,7 +1824,7 @@ async function handleTestSleep() {
 async function handleTestLaunchApp() {
     try {
         const res = await api.testLaunch();
-        showToast(res.message || 'Launch Jellyfin sent', 'success');
+        showToast(res.message || 'Launch media app sent', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1640,11 +1862,73 @@ async function handleSaveJfSettings() {
 
     try {
         await api.saveSettings({
+            media_provider: 'jellyfin',
             jellyfin_url: url,
             jellyfin_api_key: apiKey,
             jellyfin_user_id: userId,
         });
+        state.settings.media_provider = 'jellyfin';
         showToast('Jellyfin settings saved', 'success');
+        elements.settingsModal.classList.add('hidden');
+        loadLibraryMedia();
+        updateTvStatusUI();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function handleTestPlex() {
+    const url = elements.plexUrlInput.value.trim();
+    const token = elements.plexTokenInput.value.trim();
+
+    if (!url || !token) {
+        showToast('Please enter Plex server URL and Token', 'error');
+        return;
+    }
+
+    elements.testPlexBtn.disabled = true;
+    elements.testPlexBtn.textContent = 'Testing...';
+
+    try {
+        const res = await api.testPlex(url, token);
+        if (res.connected) {
+            elements.plexTestResult.classList.remove('hidden');
+            const libNames = (res.libraries || []).map(l => l.title).join(', ');
+            elements.plexTestResult.innerHTML = `
+                <div class="text-emerald-400 font-medium">Connected to "${escapeHtml(res.server_name)}" (v${escapeHtml(res.version)})</div>
+                <div class="text-slate-400 mt-1">Libraries (${(res.libraries || []).length}): ${escapeHtml(libNames || 'None')}</div>
+            `;
+            showToast(`Connected to Plex server "${res.server_name}"`, 'success');
+        } else {
+            elements.plexTestResult.classList.remove('hidden');
+            elements.plexTestResult.innerHTML = `<div class="text-rose-400">${escapeHtml(res.error || 'Connection failed')}</div>`;
+            showToast(res.error || 'Plex connection failed', 'error');
+        }
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        elements.testPlexBtn.disabled = false;
+        elements.testPlexBtn.textContent = 'Test Plex Connection';
+    }
+}
+
+async function handleSavePlexSettings() {
+    const url = elements.plexUrlInput.value.trim();
+    const token = elements.plexTokenInput.value.trim();
+    const playerIp = elements.plexPlayerIpInput.value.trim();
+
+    try {
+        await api.saveSettings({
+            media_provider: 'plex',
+            plex_url: url,
+            plex_token: token,
+            plex_player_ip: playerIp,
+        });
+        state.settings.media_provider = 'plex';
+        state.settings.plex_url = url;
+        state.settings.plex_token = token;
+        state.settings.plex_player_ip = playerIp;
+        showToast('Plex settings saved', 'success');
         elements.settingsModal.classList.add('hidden');
         loadLibraryMedia();
         updateTvStatusUI();
@@ -1891,7 +2175,17 @@ function setupEventListeners() {
         tab.addEventListener('click', () => switchSettingsTab(tab.dataset.tab));
     });
 
-    // TV Setup Buttons
+    // TV Type Toggles
+    elements.tvTypeButtons.forEach(btn => {
+        btn.addEventListener('click', () => switchTvType(btn.dataset.type));
+    });
+
+    // Media Provider Toggles
+    elements.mediaProviderButtons.forEach(btn => {
+        btn.addEventListener('click', () => switchMediaProvider(btn.dataset.provider));
+    });
+
+    // Android TV Setup Buttons
     elements.connectTvBtn.addEventListener('click', handleConnectTv);
     elements.saveTvSettingsBtn.addEventListener('click', handleSaveTvSettings);
     elements.verifyAuthBtn.addEventListener('click', handleConnectTv);
@@ -1900,9 +2194,22 @@ function setupEventListeners() {
     elements.testSleepBtn.addEventListener('click', handleTestSleep);
     elements.testLaunchAppBtn.addEventListener('click', handleTestLaunchApp);
 
+    // Samsung TV Setup Buttons
+    elements.refreshSamsungStatusBtn?.addEventListener('click', () => {
+        api.getSamsungStatus().then(renderSamsungStatusBox).catch(() => {});
+    });
+    elements.saveSamsungSettingsBtn?.addEventListener('click', handleSaveSamsungSettings);
+    elements.samsungWakeBtn?.addEventListener('click', handleSamsungWake);
+    elements.samsungLaunchBtn?.addEventListener('click', handleSamsungLaunch);
+    elements.samsungSleepBtn?.addEventListener('click', handleSamsungSleep);
+
     // Jellyfin Setup Buttons
     elements.testJfBtn.addEventListener('click', handleTestJellyfin);
     elements.saveJfSettingsBtn.addEventListener('click', handleSaveJfSettings);
+
+    // Plex Setup Buttons
+    elements.testPlexBtn?.addEventListener('click', handleTestPlex);
+    elements.savePlexSettingsBtn?.addEventListener('click', handleSavePlexSettings);
 
     // Timezone Setup Buttons
     elements.saveTimezoneBtn.addEventListener('click', handleSaveTimezone);

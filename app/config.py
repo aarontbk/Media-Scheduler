@@ -16,10 +16,26 @@ class Settings(BaseSettings):
     jellyfin_api_key: str = ""
     jellyfin_user_id: str = ""
     
-    # TV Target
+    # TV Target (Android TV / ADB)
     tv_device_name: str = "Living Room TV"
     tv_ip: str = ""
     adb_port: int = 5555
+    
+    # Plex Media Server
+    plex_url: str = ""
+    plex_token: str = ""
+    plex_client_id: str = ""       # Plex player machine identifier
+    plex_player_ip: str = ""       # IP of the Plex player on LAN
+    
+    # Samsung Smart TV (Tizen)
+    samsung_tv_ip: str = ""
+    samsung_tv_mac: str = ""       # MAC address for Wake-on-LAN
+    samsung_app_id: str = ""       # Tizen app ID to launch
+    samsung_ws_token: str = ""     # WebSocket pairing token (persisted after first pair)
+    
+    # Provider selection
+    media_provider: str = "jellyfin"   # "jellyfin" | "plex"
+    tv_type: str = "android"           # "android" | "samsung"
     
     # Timezone
     app_timezone: str = "Asia/Jerusalem"
@@ -72,6 +88,19 @@ async def get_active_settings(db: AsyncSession | None = None) -> dict:
         "tv_ip": env.tv_ip,
         "adb_port": env.adb_port,
         "app_timezone": env.app_timezone,
+        # Plex
+        "plex_url": env.plex_url,
+        "plex_token": env.plex_token,
+        "plex_client_id": env.plex_client_id,
+        "plex_player_ip": env.plex_player_ip,
+        # Samsung
+        "samsung_tv_ip": env.samsung_tv_ip,
+        "samsung_tv_mac": env.samsung_tv_mac,
+        "samsung_app_id": env.samsung_app_id,
+        "samsung_ws_token": env.samsung_ws_token,
+        # Provider selection
+        "media_provider": env.media_provider,
+        "tv_type": env.tv_type,
     }
     
     # Layer 1: Persistent JSON config

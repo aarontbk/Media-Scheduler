@@ -20,10 +20,13 @@ from app.schemas import (
     SeasonResult, EpisodeResult, SettingsUpdate, SettingsResponse,
     ADBConnectRequest, ADBStatusResponse, JellyfinUser, JellyfinTestResponse,
     PlaylistCreate, PlaylistUpdate, PlaylistResponse, PlaylistItemCreate,
-    PlaylistItemResponse, PlaylistReorderRequest
+    PlaylistItemResponse, PlaylistReorderRequest,
+    PlexTestResponse, PlexLibrary,
+    SamsungTVStatus, SamsungWakeRequest, SamsungLaunchRequest, SamsungKeyRequest,
 )
 from app.jellyfin_client import JellyfinClient
 from app.adb_client import ADBClient
+from app.provider_factory import get_media_provider, get_tv_controller
 from app import scheduler as sched_module
 
 # Configure logging
@@ -64,41 +67,65 @@ async def favicon():
 # --- Helper: Get Configured Clients ---
 async def get_clients(db: AsyncSession):
     cfg = await get_active_settings(db)
-    jellyfin = JellyfinClient(
-        base_url=cfg["jellyfin_url"],
-        api_key=cfg["jellyfin_api_key"],
-        user_id=cfg["jellyfin_user_id"],
-        tv_device_name=cfg["tv_device_name"],
-    )
-    adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
-    return jellyfin, adb, cfg
+    media = get_media_provider(cfg)
+    tv = get_tv_controller(cfg)
+    return media, tv, cfg
 
 
 # --- Settings & Device Setup Endpoints ---
 @app.get("/api/settings", response_model=SettingsResponse)
 async def get_settings_endpoint(db: AsyncSession = Depends(get_db)):
     """Fetch current app configuration and connectivity states."""
-    jellyfin, adb, cfg = await get_clients(db)
+    cfg = await get_active_settings(db)
     
-    # Test Jellyfin connection
-    jf_test = await jellyfin.test_connection()
-    jf_users = [JellyfinUser(**u) for u in jf_test.get("users", [])] if jf_test.get("connected") else []
-    
-    # Test ADB status
-    adb_status = await adb.get_detailed_status()
-    
+    # Test Jellyfin connection (always test since it's the default media backend)
+    jf_test: dict = {}
+    jf_users: list[JellyfinUser] = []
+    if cfg.get("media_provider", "jellyfin") == "jellyfin" and cfg.get("jellyfin_url"):
+        jf_client = JellyfinClient(
+            base_url=cfg["jellyfin_url"],
+            api_key=cfg["jellyfin_api_key"],
+            user_id=cfg["jellyfin_user_id"],
+            tv_device_name=cfg["tv_device_name"],
+        )
+        jf_test = await jf_client.test_connection()
+        jf_users = [JellyfinUser(**u) for u in jf_test.get("users", [])] if jf_test.get("connected") else []
+
+    # ADB status (only relevant when tv_type is android)
+    adb_state, adb_is_ready, adb_message = "not_configured", False, ""
+    if cfg.get("tv_type", "android") == "android" and cfg.get("tv_ip"):
+        adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
+        adb_status = await adb.get_detailed_status()
+        adb_state = adb_status["state"]
+        adb_is_ready = adb_status["is_ready"]
+        adb_message = adb_status["message"]
+
     return SettingsResponse(
+        # Jellyfin
         jellyfin_url=cfg["jellyfin_url"],
         jellyfin_api_key=cfg["jellyfin_api_key"],
         jellyfin_user_id=cfg["jellyfin_user_id"],
+        jellyfin_connected=jf_test.get("connected", False),
+        jellyfin_users=jf_users,
+        # Android TV
         tv_device_name=cfg["tv_device_name"],
         tv_ip=cfg["tv_ip"],
         adb_port=cfg["adb_port"],
-        jellyfin_connected=jf_test.get("connected", False),
-        jellyfin_users=jf_users,
-        adb_state=adb_status["state"],
-        adb_is_ready=adb_status["is_ready"],
-        adb_message=adb_status["message"],
+        adb_state=adb_state,
+        adb_is_ready=adb_is_ready,
+        adb_message=adb_message,
+        # Plex
+        plex_url=cfg.get("plex_url", ""),
+        plex_token=cfg.get("plex_token", ""),
+        plex_client_id=cfg.get("plex_client_id", ""),
+        plex_player_ip=cfg.get("plex_player_ip", ""),
+        # Samsung TV
+        samsung_tv_ip=cfg.get("samsung_tv_ip", ""),
+        samsung_tv_mac=cfg.get("samsung_tv_mac", ""),
+        samsung_app_id=cfg.get("samsung_app_id", ""),
+        # Provider selection
+        media_provider=cfg.get("media_provider", "jellyfin"),
+        tv_type=cfg.get("tv_type", "android"),
     )
 
 
@@ -138,29 +165,129 @@ async def test_jellyfin(
     )
 
 
+@app.get("/api/plex/test", response_model=PlexTestResponse)
+async def test_plex(
+    url: str | None = Query(None),
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Test Plex connection with current or supplied credentials."""
+    from app.plex_client import PlexClient
+    cfg = await get_active_settings(db)
+    target_url = url or cfg.get("plex_url", "")
+    target_token = token if token is not None else cfg.get("plex_token", "")
+
+    if not target_url or not target_token:
+        return PlexTestResponse(connected=False, error="Plex URL and token are required")
+
+    client = PlexClient(base_url=target_url, token=target_token)
+    res = await client.test_connection()
+    libs = [PlexLibrary(**lib) for lib in res.get("libraries", [])]
+    return PlexTestResponse(
+        connected=res.get("connected", False),
+        server_name=res.get("server_name"),
+        version=res.get("version"),
+        libraries=libs,
+        error=res.get("error"),
+    )
+
+
+# --- Samsung TV Operations ---
+@app.get("/api/tv/samsung/status", response_model=SamsungTVStatus)
+async def samsung_tv_status(db: AsyncSession = Depends(get_db)):
+    """Get Samsung TV power state via REST API."""
+    from app.samsung_tv import SamsungTVClient
+    cfg = await get_active_settings(db)
+    tv = SamsungTVClient(
+        tv_ip=cfg.get("samsung_tv_ip", ""),
+        tv_mac=cfg.get("samsung_tv_mac", ""),
+        app_id=cfg.get("samsung_app_id", ""),
+        token=cfg.get("samsung_ws_token"),
+    )
+    status = await tv.get_detailed_status()
+    return SamsungTVStatus(**status)
+
+
+@app.post("/api/tv/samsung/wake")
+async def samsung_tv_wake(data: SamsungWakeRequest, db: AsyncSession = Depends(get_db)):
+    """Send Wake-on-LAN magic packet to Samsung TV."""
+    from app.samsung_tv import SamsungTVClient
+    cfg = await get_active_settings(db)
+    tv_ip = data.ip or cfg.get("samsung_tv_ip", "")
+    tv_mac = data.mac or cfg.get("samsung_tv_mac", "")
+    if not tv_mac:
+        raise HTTPException(status_code=400, detail="Samsung TV MAC address is required for Wake-on-LAN")
+    tv = SamsungTVClient(tv_ip=tv_ip, tv_mac=tv_mac, token=cfg.get("samsung_ws_token"))
+    wol_ok = tv._send_wol_packet()
+    ws_ok = await tv.send_key("KEY_POWER")
+    if not wol_ok and not ws_ok:
+        raise HTTPException(status_code=502, detail="WoL packet failed and WebSocket KEY_POWER failed")
+    return {"message": f"Wake commands sent to Samsung TV ({tv_ip or tv_mac})", "wol": wol_ok, "ws": ws_ok}
+
+
+@app.post("/api/tv/samsung/launch-app")
+async def samsung_tv_launch_app(data: SamsungLaunchRequest, db: AsyncSession = Depends(get_db)):
+    """Launch an app on Samsung Tizen TV by app ID."""
+    from app.samsung_tv import SamsungTVClient
+    cfg = await get_active_settings(db)
+    tv = SamsungTVClient(
+        tv_ip=cfg.get("samsung_tv_ip", ""),
+        tv_mac=cfg.get("samsung_tv_mac", ""),
+        app_id=data.app_id or cfg.get("samsung_app_id", ""),
+        token=cfg.get("samsung_ws_token"),
+    )
+    if not tv.tv_ip:
+        raise HTTPException(status_code=400, detail="Samsung TV IP not configured")
+    success = await tv.launch_app(data.app_id)
+    if not success:
+        raise HTTPException(status_code=502, detail="App launch command failed")
+    return {"message": f"App launch command sent to Samsung TV at {tv.tv_ip}"}
+
+
+@app.post("/api/tv/samsung/key")
+async def samsung_tv_key(data: SamsungKeyRequest, db: AsyncSession = Depends(get_db)):
+    """Send a remote key event to Samsung TV via WebSocket."""
+    from app.samsung_tv import SamsungTVClient
+    cfg = await get_active_settings(db)
+    tv = SamsungTVClient(
+        tv_ip=cfg.get("samsung_tv_ip", ""),
+        tv_mac=cfg.get("samsung_tv_mac", ""),
+        token=cfg.get("samsung_ws_token"),
+    )
+    if not tv.tv_ip:
+        raise HTTPException(status_code=400, detail="Samsung TV IP not configured")
+    success = await tv.send_key(data.key)
+    # If a new token was acquired during pairing, persist it
+    if tv.token and tv.token != cfg.get("samsung_ws_token"):
+        await save_active_settings(db, {"samsung_ws_token": tv.token})
+    if not success:
+        raise HTTPException(status_code=502, detail=f"Key {data.key} failed — TV may not be reachable over WebSocket")
+    return {"message": f"Key {data.key} sent to Samsung TV"}
+
+
 # --- TV & ADB Operations ---
 @app.get("/api/tv/status", response_model=TVStatus)
 async def tv_status(db: AsyncSession = Depends(get_db)):
-    """Get live TV status from Jellyfin and ADB."""
-    jellyfin, adb, cfg = await get_clients(db)
-    
+    """Get live TV status from the active media provider and TV controller."""
+    media, tv, cfg = await get_clients(db)
+
     tv_session = None
     try:
-        tv_session = await jellyfin.find_tv_session()
+        tv_session = await media.find_tv_session()
     except Exception as e:
-        logger.warning(f"Could not check Jellyfin sessions: {e}")
-        
-    adb_status = await adb.get_detailed_status()
-    
+        logger.warning(f"Could not check media player sessions: {e}")
+
+    tv_ctrl_status = await tv.get_detailed_status()
+
     return TVStatus(
         session_found=tv_session is not None,
         session_id=tv_session["id"] if tv_session else None,
         device_name=tv_session["device_name"] if tv_session else None,
         is_active=tv_session["is_active"] if tv_session else False,
-        adb_state=adb_status["state"],
-        adb_reachable=adb_status["is_ready"],
-        adb_message=adb_status["message"],
-        configured_tv_ip=cfg["tv_ip"],
+        adb_state=tv_ctrl_status.get("state", "not_configured"),
+        adb_reachable=tv_ctrl_status.get("is_ready", False),
+        adb_message=tv_ctrl_status.get("message", ""),
+        configured_tv_ip=cfg.get("tv_ip") or cfg.get("samsung_tv_ip", ""),
         configured_tv_name=cfg["tv_device_name"],
     )
 
@@ -168,37 +295,38 @@ async def tv_status(db: AsyncSession = Depends(get_db)):
 @app.post("/api/tv/adb-connect", response_model=ADBStatusResponse)
 async def adb_connect(data: ADBConnectRequest, db: AsyncSession = Depends(get_db)):
     """Trigger an explicit ADB connection attempt to TV."""
-    _, adb, cfg = await get_clients(db)
+    cfg = await get_active_settings(db)
+    adb = ADBClient(tv_ip=cfg["tv_ip"], adb_port=cfg["adb_port"])
     ip = data.ip or cfg["tv_ip"]
     port = data.port or cfg["adb_port"]
-    
+
     if not ip:
         raise HTTPException(status_code=400, detail="TV IP address is required")
-        
+
     # Save IP and port if changed
     if ip != cfg["tv_ip"] or port != cfg["adb_port"]:
         await save_active_settings(db, {"tv_ip": ip, "adb_port": port})
-        
+
     res = await adb.connect(ip, port)
     return ADBStatusResponse(**res)
 
 
 @app.post("/api/tv/test-wake")
 async def test_wake_tv(db: AsyncSession = Depends(get_db)):
-    """Test screen wake-up on TV."""
-    _, adb, _ = await get_clients(db)
-    success = await adb.wake_screen()
-    if not success:
-        status = await adb.get_detailed_status()
-        raise HTTPException(status_code=502, detail=f"Wake command failed: {status['message']}")
+    """Test screen wake-up on TV (uses active TV controller)."""
+    _, tv, cfg = await get_clients(db)
+    try:
+        success = await tv.ensure_awake_and_ready()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Wake command failed: {e}")
     return {"message": "Wake command sent to TV successfully"}
 
 
 @app.post("/api/tv/test-sleep")
 async def test_sleep_tv(db: AsyncSession = Depends(get_db)):
     """Test graceful sleep / turn-off command on TV."""
-    _, adb, _ = await get_clients(db)
-    success = await adb.turn_off_tv()
+    _, tv, _ = await get_clients(db)
+    success = await tv.turn_off_tv()
     if not success:
         raise HTTPException(status_code=502, detail="TV sleep command failed")
     return {"message": "Sleep / turn-off command sent to TV successfully"}
@@ -206,13 +334,19 @@ async def test_sleep_tv(db: AsyncSession = Depends(get_db)):
 
 @app.post("/api/tv/test-launch")
 async def test_launch_tv(db: AsyncSession = Depends(get_db)):
-    """Test launching Jellyfin on TV."""
-    _, adb, _ = await get_clients(db)
-    success = await adb.launch_jellyfin()
+    """Test launching the media app on TV."""
+    _, tv, cfg = await get_clients(db)
+    tv_type = cfg.get("tv_type", "android")
+    try:
+        if tv_type == "android":
+            success = await tv.launch_jellyfin()
+        else:
+            success = await tv.launch_app()
+    except AttributeError:
+        success = await tv.ensure_awake_and_ready()
     if not success:
-        status = await adb.get_detailed_status()
-        raise HTTPException(status_code=502, detail=f"Launch command failed: {status['message']}")
-    return {"message": "Jellyfin launch command sent to TV successfully"}
+        raise HTTPException(status_code=502, detail="Launch command failed")
+    return {"message": "Media app launch command sent to TV successfully"}
 
 
 # --- Media Search & Library Browsing ---
@@ -225,10 +359,10 @@ async def search_media(
     genres: str | None = Query(None, description="Genre filter"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search or browse Jellyfin library."""
+    """Search or browse the active media library (Jellyfin or Plex)."""
     try:
-        jellyfin, _, _ = await get_clients(db)
-        results = await jellyfin.search_media(q, media_type=type, category=category, genres=genres)
+        media, _, _ = await get_clients(db)
+        results = await media.search_media(q, media_type=type, category=category, genres=genres)
         return results
     except Exception as e:
         logger.error(f"Media fetch failed: {e}")
@@ -239,8 +373,8 @@ async def search_media(
 async def get_seasons(series_id: str, db: AsyncSession = Depends(get_db)):
     """Get seasons for a TV series."""
     try:
-        jellyfin, _, _ = await get_clients(db)
-        return await jellyfin.get_seasons(series_id)
+        media, _, _ = await get_clients(db)
+        return await media.get_seasons(series_id)
     except Exception as e:
         logger.error(f"Failed to get seasons: {e}")
         raise HTTPException(status_code=502, detail=str(e))
@@ -250,8 +384,8 @@ async def get_seasons(series_id: str, db: AsyncSession = Depends(get_db)):
 async def get_episodes(series_id: str, season_id: str = Query(...), db: AsyncSession = Depends(get_db)):
     """Get episodes for a season."""
     try:
-        jellyfin, _, _ = await get_clients(db)
-        return await jellyfin.get_episodes(series_id, season_id)
+        media, _, _ = await get_clients(db)
+        return await media.get_episodes(series_id, season_id)
     except Exception as e:
         logger.error(f"Failed to get episodes: {e}")
         raise HTTPException(status_code=502, detail=str(e))
@@ -634,22 +768,23 @@ async def delete_schedule(job_id: str, db: AsyncSession = Depends(get_db)):
 # --- Play Now (Immediate) ---
 @app.post("/api/play-now", status_code=200)
 async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
-    """Immediately play items on the TV."""
-    jellyfin, adb, cfg = await get_clients(db)
-    
-    if cfg.get("tv_ip"):
-        logger.info(f"Ensuring TV screen is powered ON and Jellyfin is running at {cfg['tv_ip']}...")
-        try:
-            await adb.ensure_awake_and_ready()
-        except Exception as e:
-            logger.warning(f"ADB wake error (continuing playback): {e}")
+    """Immediately play items on the TV using the active media provider and TV controller."""
+    media, tv, cfg = await get_clients(db)
 
-    tv_session = await jellyfin.find_tv_session()
+    tv_ip_hint = cfg.get("tv_ip") or cfg.get("samsung_tv_ip")
+    if tv_ip_hint:
+        logger.info(f"Ensuring TV screen is powered ON at {tv_ip_hint}...")
+        try:
+            await tv.ensure_awake_and_ready()
+        except Exception as e:
+            logger.warning(f"TV wake error (continuing playback): {e}")
+
+    tv_session = await media.find_tv_session()
     if not tv_session:
-        logger.info("Polling for Jellyfin TV session to become available...")
+        logger.info("Polling for player session to become available...")
         for _ in range(8):
             await asyncio.sleep(2.5)
-            tv_session = await jellyfin.find_tv_session()
+            tv_session = await media.find_tv_session()
             if tv_session:
                 break
         if not tv_session:
@@ -657,36 +792,42 @@ async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
                 status_code=503,
                 detail="TV session not found after waking TV."
             )
-            
-    success = await jellyfin.play_on_session(tv_session["id"], data.item_ids)
+
+    success = await media.play_on_session(tv_session["id"], data.item_ids)
     if not success:
-        raise HTTPException(status_code=502, detail="Jellyfin play command failed")
-        
+        raise HTTPException(status_code=502, detail="Playback command failed")
+
     if data.auto_turn_off:
-        total_seconds = await jellyfin.get_total_runtime_seconds(data.item_ids)
+        total_seconds = await media.get_total_runtime_seconds(data.item_ids)
         asyncio.create_task(
             sched_module.monitor_playback_and_turn_off(
                 session_id=tv_session["id"],
                 item_ids=data.item_ids,
                 total_seconds=total_seconds,
-                adb=adb,
-                jellyfin=jellyfin,
+                adb=tv,
+                jellyfin=media,
                 job_db_id=f"play_now_{datetime.utcnow().timestamp()}",
             )
         )
     return {"message": f"Playback started on {tv_session.get('device_name', 'TV')}"}
 
 
-# --- Jellyfin Image Proxy ---
+# --- Media Image Proxy ---
 @app.get("/api/image/{item_id}")
 async def get_image(item_id: str, tag: str | None = None, db: AsyncSession = Depends(get_db)):
-    """Proxy Jellyfin item images to avoid CORS and auth token exposure."""
+    """Proxy media item images from the active provider (Jellyfin or Plex) to avoid CORS."""
     import httpx
-    jellyfin, _, _ = await get_clients(db)
-    url = jellyfin.get_image_url(item_id, image_tag=tag)
+    media, _, cfg = await get_clients(db)
+    url = media.get_image_url(item_id, image_tag=tag)
+    # Build appropriate auth headers for the provider
+    if cfg.get("media_provider", "jellyfin") == "plex":
+        from app.plex_client import _PLEX_HEADERS
+        fetch_headers = {**_PLEX_HEADERS, "X-Plex-Token": cfg.get("plex_token", "")}
+    else:
+        fetch_headers = {"X-Emby-Token": cfg.get("jellyfin_api_key", ""), "Accept": "application/json"}
     try:
-        async with httpx.AsyncClient(timeout=10) as http:
-            resp = await http.get(url, headers=jellyfin.headers)
+        async with httpx.AsyncClient(timeout=10, verify=False) as http:
+            resp = await http.get(url, headers=fetch_headers)
             if resp.status_code != 200:
                 raise HTTPException(status_code=resp.status_code)
             return Response(

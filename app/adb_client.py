@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from app.config import get_settings
+from app.tv_controller import BaseTVController
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ if os.path.exists("/data"):
     os.makedirs(android_dir, exist_ok=True)
     os.environ["ADB_VENDOR_KEYS"] = android_dir
 
-class ADBClient:
+class ADBClient(BaseTVController):
     """ADB-over-network client for controlling Android TV with guided connection flow."""
     
     def __init__(self, tv_ip: str | None = None, adb_port: int | None = None):
