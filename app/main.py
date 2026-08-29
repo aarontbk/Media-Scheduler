@@ -52,6 +52,11 @@ async def index():
     return FileResponse("frontend/index.html")
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("frontend/logo.jpeg", media_type="image/jpeg")
+
+
 # --- Helper: Get Configured Clients ---
 async def get_clients(db: AsyncSession):
     cfg = await get_active_settings(db)
