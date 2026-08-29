@@ -89,54 +89,114 @@ class JellyfinClient:
             logger.warning(f"Failed to fetch Jellyfin users: {e}")
             return []
 
-    async def search_media(self, query: str | None = None, media_type: str = "Movie,Series", limit: int = 60) -> list[dict]:
+    async def get_user_views(self) -> list[dict]:
+        """Fetch all top-level media libraries (Views) for the user."""
+        user_id = await self.get_valid_user_id()
+        endpoint = f"{self.base_url}/Users/{user_id}/Views" if user_id else f"{self.base_url}/Library/MediaFolders"
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(endpoint, headers=self.headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return [
+                        {
+                            "id": item["Id"],
+                            "name": item["Name"],
+                            "collection_type": item.get("CollectionType", ""),
+                        }
+                        for item in data.get("Items", [])
+                    ]
+        except Exception as e:
+            logger.warning(f"Failed to fetch Jellyfin user views: {e}")
+        return []
+
+    async def search_media(
+        self,
+        query: str | None = None,
+        media_type: str = "Movie,Series",
+        category: str | None = None,
+        genres: str | None = None,
+        limit: int = 60,
+    ) -> list[dict]:
         """
-        Search or browse Jellyfin library for movies and/or series.
-        If query is empty or None, returns media items sorted alphabetically.
+        Search or browse Jellyfin library for movies, series, or anime.
+        Supports category='anime' by searching Anime libraries and filtering by genre.
         """
         user_id = await self.get_valid_user_id()
         endpoint = f"{self.base_url}/Users/{user_id}/Items" if user_id else f"{self.base_url}/Items"
         
-        params = {
+        # Base query parameters
+        base_params = {
             "IncludeItemTypes": media_type,
             "Recursive": "true",
-            "Fields": "Overview,RunTimeTicks,ProductionYear,PrimaryImageAspectRatio,Status,AirDays",
+            "Fields": "Overview,RunTimeTicks,ProductionYear,PrimaryImageAspectRatio,Status,AirDays,Genres",
             "Limit": limit,
             "SortBy": "SortName",
             "SortOrder": "Ascending",
         }
         
         if query and query.strip():
-            params["searchTerm"] = query.strip()
-            
+            base_params["searchTerm"] = query.strip()
+
+        is_anime = category and category.lower() == "anime"
+        
+        results_map = {}
+
+        def parse_items(items_data):
+            for item in items_data:
+                item_id = item["Id"]
+                if item_id in results_map:
+                    continue
+                runtime_ticks = item.get("RunTimeTicks")
+                results_map[item_id] = {
+                    "id": item_id,
+                    "name": item["Name"],
+                    "type": item["Type"],
+                    "year": item.get("ProductionYear"),
+                    "overview": (item.get("Overview") or "")[:250],
+                    "runtime_minutes": int(runtime_ticks / 600_000_000) if runtime_ticks else None,
+                    "image_tag": item.get("ImageTags", {}).get("Primary"),
+                    "genres": item.get("Genres", []),
+                }
+
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    endpoint,
-                    headers=self.headers,
-                    params=params,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                results = []
-                for item in data.get("Items", []):
-                    runtime_ticks = item.get("RunTimeTicks")
-                    results.append({
-                        "id": item["Id"],
-                        "name": item["Name"],
-                        "type": item["Type"],
-                        "year": item.get("ProductionYear"),
-                        "overview": (item.get("Overview") or "")[:250],
-                        "runtime_minutes": int(runtime_ticks / 600_000_000) if runtime_ticks else None,
-                        "image_tag": item.get("ImageTags", {}).get("Primary"),
-                    })
-                return results
+                if is_anime:
+                    # 1. Check for dedicated Anime libraries
+                    views = await self.get_user_views()
+                    anime_views = [v for v in views if "anime" in v["name"].lower()]
+                    
+                    for av in anime_views:
+                        p = dict(base_params)
+                        p["ParentId"] = av["id"]
+                        resp = await client.get(endpoint, headers=self.headers, params=p)
+                        if resp.status_code == 200:
+                            parse_items(resp.json().get("Items", []))
+                    
+                    # 2. Also search items tagged with Genre 'Anime' or 'Animation'
+                    for g in ["Anime", "Animation"]:
+                        p = dict(base_params)
+                        p["Genres"] = g
+                        resp = await client.get(endpoint, headers=self.headers, params=p)
+                        if resp.status_code == 200:
+                            parse_items(resp.json().get("Items", []))
+                else:
+                    # Standard search / browse
+                    p = dict(base_params)
+                    if genres:
+                        p["Genres"] = genres
+                    resp = await client.get(endpoint, headers=self.headers, params=p)
+                    resp.raise_for_status()
+                    parse_items(resp.json().get("Items", []))
+
+            # Return list sorted alphabetically
+            return sorted(results_map.values(), key=lambda x: (x["name"] or "").lower())
         except httpx.HTTPError as e:
             logger.error(f"HTTP error during search_media: {e}")
-            return []
+            return list(results_map.values())
         except Exception as e:
             logger.error(f"Unexpected error during search_media: {e}")
-            return []
+            return list(results_map.values())
 
     async def get_seasons(self, series_id: str) -> list[dict]:
         """Get seasons for a TV series, with fallback to items query."""

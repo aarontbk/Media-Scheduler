@@ -2,6 +2,7 @@
 const state = {
     activeView: 'browser', // 'browser' | 'timeline'
     mediaTypeFilter: 'Movie,Series',
+    categoryFilter: '',
     searchQuery: '',
     selectedMedia: null,
     currentSeries: null,
@@ -210,10 +211,11 @@ const api = {
         return await res.json();
     },
 
-    async fetchMedia(query = '', type = 'Movie,Series') {
+    async fetchMedia(query = '', type = 'Movie,Series', category = '') {
         const params = new URLSearchParams();
         if (query.trim()) params.append('q', query.trim());
         if (type) params.append('type', type);
+        if (category) params.append('category', category);
         
         const res = await fetch(`/api/search?${params.toString()}`);
         if (!res.ok) throw new Error('Failed to fetch media from library');
@@ -396,7 +398,7 @@ async function loadLibraryMedia() {
     `;
 
     try {
-        const items = await api.fetchMedia(state.searchQuery, state.mediaTypeFilter);
+        const items = await api.fetchMedia(state.searchQuery, state.mediaTypeFilter, state.categoryFilter);
         renderMediaGrid(items);
     } catch (err) {
         elements.mediaContainer.innerHTML = `
@@ -422,13 +424,16 @@ function renderMediaGrid(items) {
         return;
     }
 
-    const cardsHtml = items.map(item => `
+    const cardsHtml = items.map(item => {
+        const isAnime = (item.genres && item.genres.some(g => g.toLowerCase() === 'anime')) || state.categoryFilter === 'anime';
+        const badgeLabel = isAnime ? '🌸 Anime' : (item.type === 'Movie' ? 'Movie' : 'Series');
+        return `
         <div class="media-card" data-id="${item.id}" data-type="${item.type}" data-name="${escapeHtml(item.name)}" data-tag="${item.image_tag || ''}" data-year="${item.year || ''}" data-runtime="${item.runtime_minutes || ''}" data-overview="${escapeHtml(item.overview || '')}">
             <div class="poster-wrapper">
                 ${item.image_tag 
                     ? `<img class="poster-img" src="${getImageUrl(item.id, item.image_tag)}" alt="${escapeHtml(item.name)}" loading="lazy">` 
-                    : `<div class="poster-fallback">${item.type === 'Movie' ? '🎬' : '📺'}</div>`}
-                <span class="media-type-badge">${item.type === 'Movie' ? 'Movie' : 'Series'}</span>
+                    : `<div class="poster-fallback">${isAnime ? '🌸' : (item.type === 'Movie' ? '🎬' : '📺')}</div>`}
+                <span class="media-type-badge ${isAnime ? 'anime' : ''}">${badgeLabel}</span>
             </div>
             <div class="card-content">
                 <div class="card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
@@ -438,7 +443,7 @@ function renderMediaGrid(items) {
                 </div>
             </div>
         </div>
-    `).join('');
+    `;}).join('');
 
     elements.mediaContainer.innerHTML = `<div class="media-grid">${cardsHtml}</div>`;
 
@@ -896,7 +901,8 @@ function setupEventListeners() {
         chip.addEventListener('click', () => {
             elements.filterChips.forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
-            state.mediaTypeFilter = chip.dataset.type;
+            state.mediaTypeFilter = chip.dataset.type || 'Movie,Series';
+            state.categoryFilter = chip.dataset.category || '';
             loadLibraryMedia();
         });
     });

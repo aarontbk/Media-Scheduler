@@ -31,6 +31,7 @@ class MediaSearchResult(BaseModel):
     overview: str | None = None
     runtime_minutes: int | None = None
     image_tag: str | None = None
+    genres: list[str] = []
 
 class EpisodeResult(BaseModel):
     id: str

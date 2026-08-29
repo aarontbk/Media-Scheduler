@@ -218,12 +218,14 @@ async def adb_disconnect(db: AsyncSession = Depends(get_db)):
 async def search_media(
     q: str | None = Query(None, description="Optional search term; if omitted, returns library items"),
     type: str = Query("Movie,Series", description="Comma-separated item types (Movie, Series)"),
+    category: str | None = Query(None, description="Category filter (e.g. 'anime')"),
+    genres: str | None = Query(None, description="Genre filter"),
     db: AsyncSession = Depends(get_db),
 ):
     """Search or browse Jellyfin library."""
     try:
         jellyfin, _, _ = await get_clients(db)
-        results = await jellyfin.search_media(q, media_type=type)
+        results = await jellyfin.search_media(q, media_type=type, category=category, genres=genres)
         return results
     except Exception as e:
         logger.error(f"Media fetch failed: {e}")
