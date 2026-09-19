@@ -857,7 +857,13 @@ async def get_image(item_id: str, tag: str | None = None, db: AsyncSession = Dep
         from app.plex_client import _PLEX_HEADERS
         fetch_headers = {**_PLEX_HEADERS, "X-Plex-Token": cfg.get("plex_token", "")}
     else:
-        fetch_headers = {"X-Emby-Token": cfg.get("jellyfin_api_key", ""), "Accept": "application/json"}
+        jf_key = cfg.get("jellyfin_api_key", "")
+        fetch_headers = {
+            "Authorization": f'MediaBrowser Client="MediaScheduler", Device="Server", DeviceId="ms-scheduler-01", Version="1.2.0", Token="{jf_key}"',
+            "X-Emby-Token": jf_key,
+            "X-MediaBrowser-Token": jf_key,
+            "Accept": "application/json",
+        }
     try:
         async with httpx.AsyncClient(timeout=10, verify=False) as http:
             resp = await http.get(url, headers=fetch_headers)

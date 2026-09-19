@@ -13,10 +13,16 @@ class JellyfinClient(BaseMediaProvider):
         self.api_key = api_key if api_key is not None else settings.jellyfin_api_key
         self.user_id = user_id if user_id is not None else settings.jellyfin_user_id
         self.tv_device_name = tv_device_name or settings.tv_device_name
-        self.headers = {
-            "X-Emby-Token": self.api_key,
+    @property
+    def headers(self) -> dict:
+        h = {
             "Accept": "application/json",
         }
+        if self.api_key:
+            h["Authorization"] = f'MediaBrowser Client="MediaScheduler", Device="Server", DeviceId="ms-scheduler-01", Version="1.2.0", Token="{self.api_key}"'
+            h["X-Emby-Token"] = self.api_key
+            h["X-MediaBrowser-Token"] = self.api_key
+        return h
     
     async def get_valid_user_id(self) -> str | None:
         """Resolve a valid user ID. If not explicitly set, fetch users from Jellyfin and pick the first."""
