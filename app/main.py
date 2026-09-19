@@ -369,17 +369,14 @@ async def test_sleep_tv(db: AsyncSession = Depends(get_db)):
 async def test_launch_tv(db: AsyncSession = Depends(get_db)):
     """Test launching the media app on TV."""
     _, tv, cfg = await get_clients(db)
-    tv_type = cfg.get("tv_type", "android")
+    provider = cfg.get("media_provider", "jellyfin")
     try:
-        if tv_type == "android":
-            success = await tv.launch_jellyfin()
-        else:
-            success = await tv.launch_app()
+        success = await tv.launch_app()
     except AttributeError:
         success = await tv.ensure_awake_and_ready()
     if not success:
-        raise HTTPException(status_code=502, detail="Launch command failed")
-    return {"message": "Media app launch command sent to TV successfully"}
+        raise HTTPException(status_code=502, detail=f"Failed to launch {provider.capitalize()} on TV")
+    return {"message": f"{provider.capitalize()} app launch command sent to TV successfully"}
 
 
 # --- Media Search & Library Browsing ---

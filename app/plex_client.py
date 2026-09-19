@@ -3,6 +3,7 @@ Plex Media Server client implementing BaseMediaProvider.
 Supports library browsing, session discovery, and remote playback via Plex Companion Protocol.
 """
 import logging
+from urllib.parse import quote_plus
 import httpx
 from app.media_provider import BaseMediaProvider
 
@@ -33,6 +34,8 @@ class PlexClient(BaseMediaProvider):
         self.player_ip = player_ip          # IP of the Plex player on LAN
         self.player_machine_id = player_machine_id  # Plex machine identifier of the player
         self.tv_device_name = tv_device_name
+        self._server_id: str | None = None
+        self._command_id: int = 0
 
         self.headers = {
             **_PLEX_HEADERS,
@@ -70,6 +73,49 @@ class PlexClient(BaseMediaProvider):
             return {"connected": False, "error": f"Connection timed out contacting {self.base_url}"}
         except Exception as e:
             return {"connected": False, "error": str(e)}
+
+    async def _get_server_machine_id(self) -> str:
+        """Fetch and cache the Plex Media Server's machineIdentifier."""
+        if self._server_id:
+            return self._server_id
+        if not self.base_url:
+            return ""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(f"{self.base_url}/identity", headers=self.headers)
+                if resp.status_code == 200:
+                    mid = resp.json().get("MediaContainer", {}).get("machineIdentifier")
+                    if mid:
+                        self._server_id = mid
+                        return self._server_id
+                # Fallback to GET /
+                resp = await client.get(f"{self.base_url}/", headers=self.headers)
+                if resp.status_code == 200:
+                    mid = resp.json().get("MediaContainer", {}).get("machineIdentifier")
+                    if mid:
+                        self._server_id = mid
+                        return self._server_id
+        except Exception as e:
+            logger.warning(f"Plex: Could not fetch server machineIdentifier: {e}")
+        return self._server_id or ""
+
+    async def _get_delegation_token(self) -> str:
+        """Fetch a transient delegation token from PMS for companion playback."""
+        if not self.base_url or not self.token:
+            return ""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{self.base_url}/security/token?type=delegation&scope=all",
+                    headers=self.headers,
+                )
+                if resp.status_code == 200:
+                    tok = resp.json().get("MediaContainer", {}).get("token")
+                    if tok:
+                        return tok
+        except Exception as e:
+            logger.debug(f"Plex: Could not fetch delegation token: {e}")
+        return self.token
 
     # -------------------------------------------------------------------------
     # Library helpers
@@ -215,41 +261,77 @@ class PlexClient(BaseMediaProvider):
     # Sessions
     # -------------------------------------------------------------------------
     async def get_sessions(self) -> list[dict]:
-        """Get all active Plex player sessions."""
-        try:
-            async with httpx.AsyncClient(timeout=8) as client:
+        """
+        Get all Plex player sessions, merging active playback sessions (/status/sessions)
+        and registered companion clients (/clients).
+        """
+        sessions_map: dict[str, dict] = {}
+        async with httpx.AsyncClient(timeout=8) as client:
+            # 1. Fetch active playing sessions
+            try:
                 resp = await client.get(
                     f"{self.base_url}/status/sessions",
                     headers=self.headers,
                 )
-                resp.raise_for_status()
-                items = resp.json().get("MediaContainer", {}).get("Metadata", []) or []
-                result = []
-                for s in items:
-                    player = s.get("Player", {})
-                    result.append({
-                        "id": player.get("machineIdentifier", ""),
-                        "device_name": player.get("title", player.get("device", "Unknown")),
-                        "client": player.get("product", "Plex"),
-                        "player_ip": player.get("address", ""),
-                        "is_active": player.get("state") in ("playing", "buffering", "paused"),
-                        "supports_remote_control": True,
-                        "now_playing": s.get("title"),
-                    })
-                return result
-        except Exception as e:
-            logger.error(f"Error fetching Plex sessions: {e}")
-            return []
+                if resp.status_code == 200:
+                    items = resp.json().get("MediaContainer", {}).get("Metadata", []) or []
+                    for s in items:
+                        player = s.get("Player", {})
+                        m_id = player.get("machineIdentifier", "")
+                        device_name = player.get("title", player.get("device", "Unknown"))
+                        key = m_id or device_name
+                        sessions_map[key] = {
+                            "id": m_id,
+                            "device_name": device_name,
+                            "client": player.get("product", "Plex"),
+                            "player_ip": player.get("address", ""),
+                            "is_active": player.get("state") in ("playing", "buffering", "paused"),
+                            "supports_remote_control": True,
+                            "now_playing": s.get("title"),
+                        }
+            except Exception as e:
+                logger.debug(f"Error fetching Plex active sessions: {e}")
+
+            # 2. Fetch available companion clients (discovered players on LAN)
+            try:
+                resp = await client.get(
+                    f"{self.base_url}/clients",
+                    headers=self.headers,
+                )
+                if resp.status_code == 200:
+                    clients = resp.json().get("MediaContainer", {}).get("Server", []) or []
+                    for c in clients:
+                        m_id = c.get("machineIdentifier", "")
+                        device_name = c.get("name", c.get("device", "Unknown"))
+                        key = m_id or device_name
+                        if key not in sessions_map:
+                            sessions_map[key] = {
+                                "id": m_id,
+                                "device_name": device_name,
+                                "client": c.get("product", "Plex"),
+                                "player_ip": c.get("address", c.get("host", "")),
+                                "is_active": False,
+                                "supports_remote_control": True,
+                                "now_playing": None,
+                            }
+                        else:
+                            # Enrich existing active session if player_ip was missing
+                            if not sessions_map[key].get("player_ip"):
+                                sessions_map[key]["player_ip"] = c.get("address", c.get("host", ""))
+            except Exception as e:
+                logger.debug(f"Error fetching Plex companion clients: {e}")
+
+        return list(sessions_map.values())
 
     async def find_tv_session(self) -> dict | None:
         """Find the best matching Plex player session."""
         try:
             sessions = await self.get_sessions()
 
-            # Match 1: By configured machine ID
+            # Match 1: By configured player machine ID
             if self.player_machine_id:
                 for s in sessions:
-                    if s["id"] == self.player_machine_id:
+                    if s["id"] and s["id"].lower() == self.player_machine_id.lower():
                         return s
 
             # Match 2: By configured player IP
@@ -262,7 +344,8 @@ class PlexClient(BaseMediaProvider):
             tv_name = (self.tv_device_name or "").lower()
             if tv_name:
                 for s in sessions:
-                    if tv_name in s.get("device_name", "").lower():
+                    d_name = s.get("device_name", "").lower()
+                    if tv_name in d_name or d_name in tv_name:
                         return s
 
             # Match 4: Any active session
@@ -270,7 +353,24 @@ class PlexClient(BaseMediaProvider):
                 if s.get("is_active"):
                     return s
 
-            return sessions[0] if sessions else None
+            # Match 5: Any discovered TV/client
+            if sessions:
+                return sessions[0]
+
+            # Match 6: Synthetic fallback if player_ip is configured
+            if self.player_ip:
+                logger.info(f"Plex: TV player not yet in sessions list, using configured IP {self.player_ip}")
+                return {
+                    "id": self.player_machine_id or "tv-plex-player",
+                    "device_name": self.tv_device_name or "Android TV (Plex)",
+                    "client": "Plex for Android (TV)",
+                    "player_ip": self.player_ip,
+                    "is_active": False,
+                    "supports_remote_control": True,
+                    "now_playing": None,
+                }
+
+            return None
         except Exception as e:
             logger.error(f"Unexpected error in find_tv_session: {e}")
             return None
@@ -280,64 +380,104 @@ class PlexClient(BaseMediaProvider):
     # -------------------------------------------------------------------------
     async def play_on_session(self, session_id: str, item_ids: list[str]) -> bool:
         """
-        Send PlayMedia via Plex Companion Protocol (port 32500 on the player).
-        session_id here is the player's machineIdentifier.
-        item_ids is a list of Plex ratingKeys.
+        Send PlayMedia command via Plex Companion Protocol.
+        Tries direct connection to player on port 32500 first,
+        with automatic fallback to proxying through Plex Media Server.
         """
         if not item_ids:
             return False
 
-        # Build Plex library key for the first item (queue starts here)
         first_id = item_ids[0]
-        container_key = f"/library/metadata/{first_id}"
 
-        # Use configured player_ip, or try session IP
+        # 1. Create a play queue on PMS
+        queue_key = await self._create_play_queue(item_ids)
+        container_key = queue_key if queue_key else f"/library/metadata/{first_id}"
+        if queue_key and "?" not in container_key:
+            container_key = f"{container_key}?window=100&own=1"
+
+        # 2. Server details
+        server_id = await self._get_server_machine_id()
+        parsed_url = httpx.URL(self.base_url)
+        pms_host = parsed_url.host
+        pms_port = str(parsed_url.port or 32400)
+        pms_protocol = parsed_url.scheme or "http"
+
+        # 3. Delegation token
+        play_token = await self._get_delegation_token()
+
+        # 4. Resolve player IP & machine ID
         player_ip = self.player_ip
-        if not player_ip:
+        target_machine_id = session_id or self.player_machine_id
+
+        if not player_ip or not target_machine_id:
             sessions = await self.get_sessions()
             for s in sessions:
-                if s["id"] == session_id:
-                    player_ip = s.get("player_ip", "")
+                if session_id and s["id"] == session_id:
+                    player_ip = player_ip or s.get("player_ip", "")
+                    target_machine_id = target_machine_id or s.get("id", "")
                     break
 
-        if not player_ip:
-            logger.error("Plex: No player IP configured or found in session — cannot send Companion command")
-            return False
-
-        companion_url = f"http://{player_ip}:32500/player/playback/playMedia"
+        self._command_id += 1
         params = {
-            "key": container_key,
+            "providerIdentifier": "com.plexapp.plugins.library",
+            "machineIdentifier": server_id,
+            "protocol": pms_protocol,
+            "address": pms_host,
+            "port": pms_port,
+            "offset": 0,
+            "key": f"/library/metadata/{first_id}",
+            "type": "video",
             "containerKey": container_key,
-            "machineIdentifier": session_id or self.player_machine_id,
-            "address": self.base_url.split("//")[-1].split(":")[0],
-            "port": self.base_url.split(":")[-1].split("/")[0] if ":" in self.base_url.split("//")[-1] else "32400",
-            "token": self.token,
-            "commandID": "1",
+            "token": play_token,
+            "commandID": str(self._command_id),
+        }
+        headers = {
+            **self.player_headers,
+            "X-Plex-Target-Client-Identifier": target_machine_id or "",
         }
 
-        # If multiple items, queue them all by creating a play queue first
-        if len(item_ids) > 1:
-            queue_key = await self._create_play_queue(item_ids)
-            if queue_key:
-                params["containerKey"] = queue_key
-                params["key"] = f"/library/metadata/{first_id}"
+        # Strategy A: Direct connection to Plex player (port 32500)
+        if player_ip:
+            direct_url = f"http://{player_ip}:32500/player/playback/playMedia"
+            try:
+                logger.info(f"Plex Companion: Sending direct PlayMedia to {direct_url}...")
+                async with httpx.AsyncClient(timeout=8) as client:
+                    resp = await client.get(direct_url, headers=headers, params=params)
+                    if resp.status_code in (200, 204):
+                        logger.info(f"Plex Companion: Direct PlayMedia succeeded on {player_ip}")
+                        return True
+                    logger.warning(f"Plex Companion: Direct PlayMedia returned {resp.status_code}: {resp.text[:150]}")
+            except Exception as e:
+                logger.warning(f"Plex Companion: Direct connection to {player_ip}:32500 failed ({e}), attempting server proxy...")
 
+        # Strategy B: Proxy through Plex Media Server (/player/playback/playMedia)
+        proxy_url = f"{self.base_url}/player/playback/playMedia"
         try:
+            logger.info(f"Plex Companion: Sending proxied PlayMedia via PMS for client {target_machine_id}...")
+            proxy_headers = {**headers, "X-Plex-Token": self.token}
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(companion_url, headers=self.player_headers, params=params)
+                resp = await client.get(proxy_url, headers=proxy_headers, params=params)
                 if resp.status_code in (200, 204):
-                    logger.info(f"Plex Companion: PlayMedia sent to {player_ip}")
+                    logger.info(f"Plex Companion: Proxied PlayMedia succeeded via PMS")
                     return True
-                logger.error(f"Plex Companion: PlayMedia returned {resp.status_code}: {resp.text[:200]}")
-                return False
+                logger.error(f"Plex Companion: Proxied PlayMedia returned {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            logger.error(f"Plex Companion: PlayMedia failed: {e}")
-            return False
+            logger.error(f"Plex Companion: Proxied PlayMedia failed: {e}")
+
+        return False
 
     async def _create_play_queue(self, item_ids: list[str]) -> str | None:
         """Create a Plex play queue from a list of item IDs and return its containerKey."""
+        if not item_ids:
+            return None
         try:
-            uri = f"server://{self.player_machine_id}/com.plexapp.plugins.library/library/metadata/{','.join(item_ids)}"
+            server_id = await self._get_server_machine_id()
+            if len(item_ids) == 1:
+                uri = f"server://{server_id}/com.plexapp.plugins.library/library/metadata/{item_ids[0]}"
+            else:
+                item_keys = ",".join(str(x) for x in item_ids)
+                uri = f"library:///directory/{quote_plus(f'/library/metadata/{item_keys}')}"
+
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
                     f"{self.base_url}/playQueues",
@@ -349,6 +489,7 @@ class PlexClient(BaseMediaProvider):
                     queue_id = pq.get("playQueueID")
                     if queue_id:
                         return f"/playQueues/{queue_id}"
+                logger.warning(f"Plex playQueues returned {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
             logger.warning(f"Plex: Could not create play queue: {e}")
         return None

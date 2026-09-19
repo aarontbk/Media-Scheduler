@@ -43,11 +43,12 @@ def _get_adb_env() -> dict:
 class ADBClient(BaseTVController):
     """ADB-over-network client for controlling Android TV with guided connection flow."""
     
-    def __init__(self, tv_ip: str | None = None, adb_port: int | None = None):
+    def __init__(self, tv_ip: str | None = None, adb_port: int | None = None, media_provider: str | None = None):
         settings = get_settings()
         self.tv_ip = (tv_ip if tv_ip is not None else settings.tv_ip).strip()
         self.adb_port = adb_port if adb_port is not None else settings.adb_port
         self.tv_address = f"{self.tv_ip}:{self.adb_port}" if self.tv_ip else ""
+        self.media_provider = (media_provider or settings.media_provider or "jellyfin").lower()
     
     async def _run_adb(self, *args: str, timeout: float = 10) -> tuple[int, str, str]:
         """Run an ADB command and return (returncode, stdout, stderr)."""
@@ -237,16 +238,60 @@ class ADBClient(BaseTVController):
         """Launch the official Jellyfin Android TV application."""
         if not self.tv_address:
             return False
-        rc, stdout, stderr = await self._run_adb(
+        # Try monkey launcher first (most reliable launcher across Android versions)
+        rc, _, _ = await self._run_adb(
+            "-s", self.tv_address, "shell",
+            "monkey", "-p", "org.jellyfin.androidtv", "-c", "android.intent.category.LAUNCHER", "1"
+        )
+        if rc == 0:
+            logger.info(f"Jellyfin app launch command sent to {self.tv_address}")
+            return True
+        rc, _, stderr = await self._run_adb(
             "-s", self.tv_address, "shell",
             "am", "start", "-n",
             "org.jellyfin.androidtv/.ui.startup.StartupActivity"
         )
         if rc == 0:
-            logger.info(f"Jellyfin app launch command sent to {self.tv_address}")
             return True
         logger.warning(f"Launch Jellyfin failed: {stderr}")
         return False
+
+    async def launch_plex(self) -> bool:
+        """Launch the official Plex Android TV application."""
+        if not self.tv_address:
+            return False
+        logger.info(f"Launching Plex Android TV app on {self.tv_address}...")
+        # 1. Try monkey launcher (standard on all Android TV versions)
+        rc, _, _ = await self._run_adb(
+            "-s", self.tv_address, "shell",
+            "monkey", "-p", "com.plexapp.android", "-c", "android.intent.category.LAUNCHER", "1"
+        )
+        if rc == 0:
+            logger.info(f"Plex app launch command sent to {self.tv_address}")
+            return True
+            
+        # 2. Try explicit activities
+        for act in [
+            "com.plexapp.android/com.plexapp.plex.activities.SplashActivity",
+            "com.plexapp.android/.SplashActivity",
+        ]:
+            rc, _, stderr = await self._run_adb(
+                "-s", self.tv_address, "shell",
+                "am", "start", "-n", act
+            )
+            if rc == 0:
+                logger.info(f"Plex app launch command sent to {self.tv_address} via {act}")
+                return True
+
+        logger.warning(f"Launch Plex failed: {stderr}")
+        return False
+
+    async def launch_app(self, provider: str | None = None) -> bool:
+        """Launch the media app matching the provider (jellyfin or plex)."""
+        target = (provider or self.media_provider or "jellyfin").lower()
+        if target == "plex":
+            return await self.launch_plex()
+        return await self.launch_jellyfin()
 
     async def send_home(self) -> bool:
         """Send KEYCODE_HOME key event."""
@@ -259,8 +304,8 @@ class ADBClient(BaseTVController):
 
     async def ensure_awake_and_ready(self) -> bool:
         """
-        Ensure the TV is powered ON and Jellyfin is running in foreground.
-        Wakes screen if asleep or in standby, presses HOME, and launches Jellyfin.
+        Ensure the TV is powered ON and the active media app (Plex or Jellyfin) is running in foreground.
+        Wakes screen if asleep or in standby, presses HOME, and launches the media app.
         """
         if not self.tv_address:
             logger.info("No TV IP configured, skipping ADB screen wake")
@@ -290,13 +335,15 @@ class ADBClient(BaseTVController):
         else:
             logger.info("TV screen is already Awake.")
             
-        # 3. Always bring Jellyfin to foreground
-        logger.info("Ensuring Jellyfin Android TV app is running in foreground...")
-        await self.launch_jellyfin()
+        # 3. Always bring the configured media app (Plex or Jellyfin) to foreground
+        target_app = (self.media_provider or "jellyfin").lower()
+        logger.info(f"Ensuring {target_app.capitalize()} Android TV app is running in foreground...")
+        await self.launch_app(target_app)
+        await asyncio.sleep(1.5)
         return True
 
     async def wake_and_prepare(self) -> bool:
-        """Full wake-up workflow: connect -> wake -> home -> launch Jellyfin."""
+        """Full wake-up workflow: connect -> wake -> home -> launch configured media app."""
         return await self.ensure_awake_and_ready()
 
     async def turn_off_tv(self) -> bool:

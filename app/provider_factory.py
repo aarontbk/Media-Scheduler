@@ -15,10 +15,11 @@ def get_media_provider(cfg: dict) -> BaseMediaProvider:
 
     if provider == "plex":
         from app.plex_client import PlexClient
+        player_ip = (cfg.get("plex_player_ip") or cfg.get("tv_ip") or "").strip()
         return PlexClient(
             base_url=cfg.get("plex_url", ""),
             token=cfg.get("plex_token", ""),
-            player_ip=cfg.get("plex_player_ip", ""),
+            player_ip=player_ip,
             player_machine_id=cfg.get("plex_client_id", ""),
             tv_device_name=cfg.get("tv_device_name", ""),
         )
@@ -55,4 +56,5 @@ def get_tv_controller(cfg: dict) -> BaseTVController:
     return ADBClient(
         tv_ip=cfg.get("tv_ip", ""),
         adb_port=cfg.get("adb_port", 5555),
+        media_provider=cfg.get("media_provider", "jellyfin"),
     )
