@@ -365,18 +365,25 @@ class JellyfinClient(BaseMediaProvider):
                 )
                 resp.raise_for_status()
                 sessions = resp.json()
-                return [
-                    {
+                result_sessions = []
+                for s in sessions:
+                    play_state = s.get("PlayState", {})
+                    is_paused = play_state.get("IsPaused", False)
+                    item = s.get("NowPlayingItem")
+                    runtime_ticks = item.get("RunTimeTicks", 0) if item else 0
+                    pos_ticks = play_state.get("PositionTicks", 0)
+                    is_at_end = bool(runtime_ticks > 0 and (pos_ticks >= runtime_ticks - 300_000_000 or (pos_ticks / runtime_ticks) >= 0.95))
+                    is_active = bool(s.get("IsActive", False) and item and not is_paused and not is_at_end)
+                    result_sessions.append({
                         "id": s["Id"],
                         "device_name": s.get("DeviceName", "Unknown"),
                         "client": s.get("Client", "Unknown"),
-                        "is_active": s.get("IsActive", False),
+                        "is_active": is_active,
                         "supports_remote_control": s.get("SupportsRemoteControl", False),
-                        "now_playing": s.get("NowPlayingItem", {}).get("Name") if s.get("NowPlayingItem") else None,
+                        "now_playing": item.get("Name") if is_active else None,
                         "user_name": s.get("UserName"),
-                    }
-                    for s in sessions
-                ]
+                    })
+                return result_sessions
         except Exception as e:
             logger.error(f"Error fetching Jellyfin sessions: {e}")
             return []

@@ -280,14 +280,29 @@ class PlexClient(BaseMediaProvider):
                         m_id = player.get("machineIdentifier", "")
                         device_name = player.get("title", player.get("device", "Unknown"))
                         key = m_id or device_name
+
+                        p_state = (player.get("state") or "").lower()
+                        duration_ms = int(s.get("duration") or 0)
+                        offset_ms = int(s.get("viewOffset") or 0)
+
+                        # Detect if playback reached end/credits (within 30s of end or >= 95% progress)
+                        is_at_end = (duration_ms > 0 and (offset_ms >= duration_ms - 30000 or (offset_ms / duration_ms) >= 0.95))
+
+                        # Active playback requires playing/buffering and NOT having reached the end credits/post-play screen
+                        is_active_playback = (p_state in ("playing", "buffering")) and not is_at_end
+
                         sessions_map[key] = {
                             "id": m_id,
                             "device_name": device_name,
                             "client": player.get("product", "Plex"),
                             "player_ip": player.get("address", ""),
-                            "is_active": player.get("state") in ("playing", "buffering", "paused"),
+                            "is_active": is_active_playback,
+                            "playback_state": p_state,
+                            "view_offset_ms": offset_ms,
+                            "duration_ms": duration_ms,
+                            "is_at_end": is_at_end,
                             "supports_remote_control": True,
-                            "now_playing": s.get("title"),
+                            "now_playing": s.get("title") if is_active_playback else None,
                         }
             except Exception as e:
                 logger.debug(f"Error fetching Plex active sessions: {e}")
@@ -610,6 +625,8 @@ class PlexClient(BaseMediaProvider):
         sessions = await self.get_sessions()
         for s in sessions:
             if s["id"] == session_id:
+                return s
+            if self.player_ip and s.get("player_ip") == self.player_ip:
                 return s
         return None
 

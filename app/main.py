@@ -662,7 +662,12 @@ async def play_playlist_now(playlist_id: str, db: AsyncSession = Depends(get_db)
             job_db_id=job.id,
         )
     )
-    return {"message": f"Playlist '{pl.name}' started on TV"}
+    return {
+        "message": f"Playlist '{pl.name}' started on TV",
+        "job_id": job.id,
+        "turn_off_at": turn_off_at.isoformat() if turn_off_at else None,
+        "turn_off_timestamp": int(turn_off_at.replace(tzinfo=app_tz).timestamp()) if turn_off_at else None,
+    }
 
 
 # --- Scheduling Endpoints ---
@@ -692,7 +697,24 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         now_local = datetime.now(app_tz).replace(tzinfo=None)
         if scheduled_dt <= now_local:
             raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
-            
+
+    # Pre-calculate runtime_minutes if media/playlist is known
+    calc_runtime_minutes = None
+    try:
+        media_p = get_media_provider(cfg)
+        if data.target_type == "playlist":
+            pl_r = await db.execute(select(Playlist).where(Playlist.id == data.jellyfin_item_id).options(selectinload(Playlist.items)))
+            pl_obj = pl_r.scalar_one_or_none()
+            if pl_obj and pl_obj.items:
+                p_item_ids = [it.jellyfin_item_id for it in pl_obj.items]
+                sec = await media_p.get_total_runtime_seconds(p_item_ids)
+                calc_runtime_minutes = int(sec / 60) if sec else None
+        else:
+            sec = await media_p.get_total_runtime_seconds([data.jellyfin_item_id])
+            calc_runtime_minutes = int(sec / 60) if sec else None
+    except Exception as e:
+        logger.debug(f"Could not precalculate runtime_minutes: {e}")
+
     job = ScheduledJob(
         name=data.name,
         target_type=data.target_type,
@@ -707,6 +729,7 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         audio_language=data.audio_language,
         subtitle_enabled=data.subtitle_enabled,
         subtitle_language=data.subtitle_language,
+        runtime_minutes=calc_runtime_minutes,
         status="pending",
     )
     db.add(job)
@@ -737,17 +760,30 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         job.error_message = "Failed to register with scheduler"
         await db.commit()
         await db.refresh(job)
-        
-    return job
+
+    resp = ScheduleResponse.model_validate(job)
+    if job.turn_off_at:
+        resp.turn_off_timestamp = int(job.turn_off_at.replace(tzinfo=app_tz).timestamp())
+    return resp
 
 
 @app.get("/api/schedule", response_model=list[ScheduleResponse])
 async def list_schedules(db: AsyncSession = Depends(get_db)):
     """List all scheduled jobs."""
+    cfg = await get_active_settings(db)
+    app_tz = ZoneInfo(cfg.get("app_timezone", "Asia/Jerusalem"))
     result = await db.execute(
         select(ScheduledJob).order_by(ScheduledJob.scheduled_time.asc())
     )
-    return result.scalars().all()
+    jobs = result.scalars().all()
+    responses = []
+    for j in jobs:
+        resp = ScheduleResponse.model_validate(j)
+        if j.turn_off_at:
+            aware = j.turn_off_at.replace(tzinfo=app_tz)
+            resp.turn_off_timestamp = int(aware.timestamp())
+        responses.append(resp)
+    return responses
 
 
 @app.put("/api/schedule/{job_id}", response_model=ScheduleResponse)
@@ -827,7 +863,10 @@ async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = 
 
     await db.commit()
     await db.refresh(job)
-    return job
+    resp = ScheduleResponse.model_validate(job)
+    if job.turn_off_at:
+        resp.turn_off_timestamp = int(job.turn_off_at.replace(tzinfo=app_tz).timestamp())
+    return resp
 
 
 @app.delete("/api/schedule/{job_id}", status_code=204)
@@ -925,7 +964,12 @@ async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
                 job_db_id=job.id,
             )
         )
-    return {"message": f"Playback started on {tv_session.get('device_name', 'TV')}", "job_id": job.id}
+    return {
+        "message": f"Playback started on {tv_session.get('device_name', 'TV')}",
+        "job_id": job.id,
+        "turn_off_at": turn_off_at.isoformat() if turn_off_at else None,
+        "turn_off_timestamp": int(turn_off_at.replace(tzinfo=app_tz).timestamp()) if turn_off_at else None,
+    }
 
 
 # --- Media Image Proxy ---

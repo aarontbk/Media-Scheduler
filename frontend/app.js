@@ -1024,6 +1024,8 @@ function renderPlaylistsGrid(playlists) {
             try {
                 await api.playPlaylistNow(id);
                 showToast(`Playing "${pl?.name || 'Playlist'}" on TV`, 'success');
+                switchView('timeline');
+                loadTimeline();
             } catch (err) {
                 showToast(err.message, 'error');
             }
@@ -1613,18 +1615,37 @@ async function handleInstantPlay() {
 let countdownInterval = null;
 let timelinePollTimer = null;
 
+function parseSafeDate(dateStr) {
+    if (!dateStr) return null;
+    if (typeof dateStr === 'number') return dateStr;
+    let s = String(dateStr).trim().replace(' ', 'T');
+    // Truncate microseconds (.123456 -> .123) for Safari / WebKit compatibility
+    s = s.replace(/(\.\d{3})\d+/, '$1');
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.getTime();
+}
+
 function updateCountdowns() {
     const timerEls = document.querySelectorAll('.turnoff-timer');
     timerEls.forEach(el => {
-        const turnOffIso = el.dataset.turnOff;
         const valEl = el.querySelector('.countdown-value');
         if (!valEl) return;
-        if (!turnOffIso) {
+
+        let turnOffMs = null;
+        if (el.dataset.turnOffTimestamp) {
+            const ts = parseInt(el.dataset.turnOffTimestamp, 10);
+            if (!isNaN(ts) && ts > 0) turnOffMs = ts * 1000;
+        }
+        if (!turnOffMs && el.dataset.turnOff) {
+            turnOffMs = parseSafeDate(el.dataset.turnOff);
+        }
+
+        if (!turnOffMs) {
             valEl.textContent = 'Active (monitoring)';
             return;
         }
-        const turnOffTime = new Date(turnOffIso).getTime();
-        const diff = turnOffTime - Date.now();
+
+        const diff = turnOffMs - Date.now();
         if (diff <= 0) {
             valEl.textContent = 'Turning off TV shortly...';
         } else {
@@ -1741,7 +1762,7 @@ function renderTimeline(jobs) {
         if (isRunning) {
             if (job.auto_turn_off) {
                 turnOffHtml = `
-                    <div class="turnoff-timer text-xs font-semibold text-emerald-400 flex items-center gap-1.5 pt-0.5" data-turn-off="${job.turn_off_at || ''}">
+                    <div class="turnoff-timer text-xs font-semibold text-emerald-400 flex items-center gap-1.5 pt-0.5" data-turn-off="${job.turn_off_at || ''}" data-turn-off-timestamp="${job.turn_off_timestamp || ''}">
                         <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                         <span>Auto-off in:</span>
                         <span class="countdown-value font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-emerald-300">Calculating...</span>
@@ -2273,6 +2294,8 @@ function setupEventListeners() {
         try {
             await api.playPlaylistNow(state.currentPlaylist.id);
             showToast(`Playing playlist "${state.currentPlaylist.name}" on TV`, 'success');
+            switchView('timeline');
+            loadTimeline();
         } catch (e) {
             showToast(e.message, 'error');
         } finally {

@@ -91,6 +91,7 @@ class ScheduleResponse(BaseModel):
     error_message: str | None
     started_at: datetime | None = None
     turn_off_at: datetime | None = None
+    turn_off_timestamp: int | None = None
     runtime_minutes: int | None = None
     audio_language: str | None = None
     subtitle_enabled: bool | None = None

@@ -60,7 +60,7 @@ async def monitor_playback_and_turn_off(
     job_db_id: str,
 ) -> None:
     """
-    Background task that monitors Jellyfin playback and gracefully turns off the TV
+    Background task that monitors playback and gracefully turns off the TV
     when the movie or playlist finishes.
     """
     logger.info(
@@ -68,13 +68,15 @@ async def monitor_playback_and_turn_off(
         f"(expected total runtime: {total_seconds // 60}m)"
     )
     
-    # Grace period at startup (wait 60 seconds before checking if stopped)
-    await asyncio.sleep(60)
+    # Grace period at startup: allow player to buffer and start playing
+    startup_delay = min(35, max(15, total_seconds // 4))
+    await asyncio.sleep(startup_delay)
     
-    elapsed = 60
+    elapsed = startup_delay
     stop_count = 0
-    poll_interval = 25
-    max_timeout = total_seconds + 900  # Expected runtime + 15 min buffer
+    poll_interval = 10
+    # Safety cap: expected total runtime + 2.5 minutes buffer (not 15 minutes!)
+    max_timeout = total_seconds + 150
     
     while elapsed < max_timeout:
         await asyncio.sleep(poll_interval)
@@ -82,15 +84,25 @@ async def monitor_playback_and_turn_off(
         
         try:
             session_info = await jellyfin.get_session_now_playing(session_id)
-            if not session_info or not session_info.get("now_playing"):
+            is_playing = bool(session_info and session_info.get("is_active") and session_info.get("now_playing"))
+            
+            if not is_playing:
                 stop_count += 1
-                logger.debug(f"Session {session_id} reported no active media (stop count: {stop_count})")
+                logger.info(
+                    f"Playback monitor [job={job_db_id}]: Session {session_id} inactive "
+                    f"(stop_count={stop_count}/2, elapsed={elapsed}s/{total_seconds}s)"
+                )
             else:
                 stop_count = 0
                 
-            # If playback was detected stopped for 2 consecutive checks (~50 seconds of idle)
+            # If playback was detected stopped for 2 consecutive checks (~20 seconds)
             if stop_count >= 2:
                 logger.info(f"Playback ended on TV session {session_id}. Turning off TV gracefully...")
+                break
+                
+            # If total expected duration of the media/playlist has passed and player is inactive
+            if elapsed >= total_seconds and stop_count >= 1:
+                logger.info(f"Expected runtime elapsed ({elapsed}s >= {total_seconds}s) and session inactive. Turning off TV...")
                 break
                 
         except Exception as e:
@@ -98,7 +110,7 @@ async def monitor_playback_and_turn_off(
             
     # Buffer before turning off TV
     logger.info(f"Playback finished for job {job_db_id}. Executing graceful TV power-off...")
-    await asyncio.sleep(10)
+    await asyncio.sleep(5)
     
     turn_off_success = await adb.turn_off_tv()
     logger.info(f"TV turn-off sequence completed (success={turn_off_success})")
