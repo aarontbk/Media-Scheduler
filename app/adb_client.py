@@ -267,7 +267,8 @@ class ADBClient(BaseTVController):
             "monkey", "-p", "com.plexapp.android", "-c", "android.intent.category.LAUNCHER", "1"
         )
         if rc == 0:
-            logger.info(f"Plex app launch command sent to {self.tv_address}")
+            logger.info(f"Plex app launch command sent to {self.tv_address}. Waiting 5s for Plex to load...")
+            await asyncio.sleep(5)
             return True
             
         # 2. Try explicit activities
@@ -280,7 +281,8 @@ class ADBClient(BaseTVController):
                 "am", "start", "-n", act
             )
             if rc == 0:
-                logger.info(f"Plex app launch command sent to {self.tv_address} via {act}")
+                logger.info(f"Plex app launch command sent to {self.tv_address} via {act}. Waiting 5s for Plex to load...")
+                await asyncio.sleep(5)
                 return True
 
         logger.warning(f"Launch Plex failed: {stderr}")
@@ -339,7 +341,8 @@ class ADBClient(BaseTVController):
         target_app = (self.media_provider or "jellyfin").lower()
         logger.info(f"Ensuring {target_app.capitalize()} Android TV app is running in foreground...")
         await self.launch_app(target_app)
-        await asyncio.sleep(1.5)
+        if target_app != "plex":
+            await asyncio.sleep(1.5)
         return True
 
     async def wake_and_prepare(self) -> bool:
