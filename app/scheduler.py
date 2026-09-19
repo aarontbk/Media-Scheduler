@@ -308,6 +308,60 @@ async def cancel_job(apscheduler_job_id: str) -> bool:
         return False
 
 
+async def resync_pending_jobs() -> None:
+    """
+    On startup or recovery, inspect ScheduledJob records in DB.
+    - Mark past 'once' jobs as failed/missed so they don't linger as pending.
+    - Register any active recurring or future pending jobs in APScheduler if not present.
+    """
+    global scheduler
+    if scheduler is None:
+        return
+        
+    try:
+        app_tz = await get_configured_tz()
+        now_local = datetime.now(app_tz).replace(tzinfo=None)
+        
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ScheduledJob).where(ScheduledJob.status == "pending")
+            )
+            pending_jobs = result.scalars().all()
+            
+            for job in pending_jobs:
+                if job.schedule_type == "once" and job.scheduled_time <= now_local:
+                    job.status = "failed"
+                    job.error_message = "Missed scheduled time while server was stopped"
+                    logger.info(f"Marked overdue job {job.id} ({job.name}) as failed")
+                    continue
+                    
+                ap_id = f"playback_{job.id}"
+                need_register = False
+                try:
+                    await scheduler.get_schedule(ap_id)
+                except Exception:
+                    need_register = True
+
+                if need_register:
+                    logger.info(f"Resyncing job {job.id} ({job.name}) into APScheduler")
+                    new_ap_id = await schedule_playback(
+                        job_db_id=job.id,
+                        target_type=job.target_type,
+                        target_id=job.jellyfin_item_id,
+                        scheduled_time=job.scheduled_time,
+                        schedule_type=job.schedule_type,
+                        days_of_week=job.days_of_week,
+                        time_of_day=job.time_of_day,
+                        auto_turn_off=job.auto_turn_off,
+                    )
+                    if new_ap_id:
+                        job.apscheduler_job_id = new_ap_id
+                        
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Error during pending jobs resync: {e}")
+
+
 async def start_scheduler() -> None:
     """Start the background scheduler engine and its background execution worker."""
     global scheduler

@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Media Scheduler...")
     await init_db()
     await sched_module.start_scheduler()
+    await sched_module.resync_pending_jobs()
     yield
     logger.info("Shutting down Media Scheduler...")
     await sched_module.stop_scheduler()
@@ -663,6 +664,11 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         if scheduled_dt.tzinfo is not None:
             scheduled_dt = scheduled_dt.astimezone(app_tz).replace(tzinfo=None)
             
+    if data.schedule_type == "once":
+        now_local = datetime.now(app_tz).replace(tzinfo=None)
+        if scheduled_dt <= now_local:
+            raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
+            
     job = ScheduledJob(
         name=data.name,
         target_type=data.target_type,
@@ -753,6 +759,11 @@ async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = 
         job.scheduled_time = now.replace(
             hour=int(parts[0]), minute=int(parts[1]) if len(parts) > 1 else 0, second=0, microsecond=0
         ).replace(tzinfo=None)
+
+    if job.schedule_type == "once":
+        now_local = datetime.now(app_tz).replace(tzinfo=None)
+        if job.scheduled_time <= now_local:
+            raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
 
     job.status = "pending"
     job.error_message = None

@@ -1350,7 +1350,7 @@ function openScheduleModal(targetData) {
     setRecurrenceFrequency('once');
 
     const defaultTime = new Date();
-    defaultTime.setMinutes(defaultTime.getMinutes() + 15);
+    defaultTime.setMinutes(defaultTime.getMinutes() + 2);
     elements.scheduleDatetime.value = toLocalDatetimeString(defaultTime);
     
     const defH = String(defaultTime.getHours()).padStart(2, '0');
@@ -1448,10 +1448,16 @@ function handlePresetClick(btn) {
         now.setMinutes(now.getMinutes() + mins);
     } else if (btn.dataset.preset === 'tonight-20') {
         now.setHours(20, 0, 0, 0);
-        if (now < new Date()) now.setDate(now.getDate() + 1);
+        if (now < new Date()) {
+            now.setDate(now.getDate() + 1);
+            showToast('20:00 already passed today. Set for tomorrow at 20:00', 'info');
+        }
     } else if (btn.dataset.preset === 'tonight-21') {
         now.setHours(21, 30, 0, 0);
-        if (now < new Date()) now.setDate(now.getDate() + 1);
+        if (now < new Date()) {
+            now.setDate(now.getDate() + 1);
+            showToast('21:30 already passed today. Set for tomorrow at 21:30', 'info');
+        }
     }
     elements.scheduleDatetime.value = toLocalDatetimeString(now);
 }
@@ -1471,6 +1477,11 @@ async function handleConfirmSchedule() {
         const dtVal = elements.scheduleDatetime.value;
         if (!dtVal) {
             showToast('Please select date and time', 'error');
+            return;
+        }
+        const targetDate = new Date(dtVal);
+        if (isNaN(targetDate.getTime()) || targetDate.getTime() <= Date.now() + 10000) {
+            showToast('Scheduled time must be at least 15 seconds in the future', 'error');
             return;
         }
         scheduledTime = dtVal.length === 16 ? `${dtVal}:00` : dtVal;
