@@ -40,7 +40,14 @@ class BaseMediaProvider(ABC):
         """Find the best matching TV session for remote playback."""
 
     @abstractmethod
-    async def play_on_session(self, session_id: str, item_ids: list[str]) -> bool:
+    async def play_on_session(
+        self,
+        session_id: str,
+        item_ids: list[str],
+        audio_language: str | None = None,
+        subtitle_enabled: bool | None = None,
+        subtitle_language: str | None = None,
+    ) -> bool:
         """Send PlayNow command to the given session."""
 
     @abstractmethod

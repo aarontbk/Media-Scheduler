@@ -118,6 +118,9 @@ async def execute_playback(
     target_type: str = "media",
     target_id: str = "",
     auto_turn_off: bool = True,
+    audio_language: str | None = None,
+    subtitle_enabled: bool | None = None,
+    subtitle_language: str | None = None,
 ) -> None:
     """Execute a scheduled playback job for single media or a playlist."""
     logger.info(f"Executing scheduled playback: job={job_db_id}, type={target_type}, target={target_id}")
@@ -151,12 +154,22 @@ async def execute_playback(
     adb = get_tv_controller(cfg)
     
     try:
-        # Update status to running
+        app_tz = await get_configured_tz()
+        now_local = datetime.now(app_tz).replace(tzinfo=None)
+        total_seconds = await jellyfin.get_total_runtime_seconds(item_ids)
+        turn_off_at = now_local + timedelta(seconds=total_seconds + 60) if auto_turn_off and total_seconds else None
+
+        # Update status to running with timestamps
         async with AsyncSessionLocal() as session:
             await session.execute(
                 update(ScheduledJob)
                 .where(ScheduledJob.id == job_db_id)
-                .values(status="running")
+                .values(
+                    status="running",
+                    started_at=now_local,
+                    turn_off_at=turn_off_at,
+                    runtime_minutes=int(total_seconds / 60) if total_seconds else None,
+                )
             )
             await session.commit()
         
@@ -186,9 +199,15 @@ async def execute_playback(
         else:
             logger.info(f"Using player session: {tv_session['id']} ({tv_session['device_name']})")
         
-        # Send play command
+        # Send play command with track preferences
         logger.info(f"Starting playback of {len(item_ids)} item(s) on session {tv_session['id']} ({tv_session['device_name']})")
-        success = await jellyfin.play_on_session(tv_session["id"], item_ids)
+        success = await jellyfin.play_on_session(
+            tv_session["id"],
+            item_ids,
+            audio_language=audio_language,
+            subtitle_enabled=subtitle_enabled,
+            subtitle_language=subtitle_language,
+        )
         if not success:
             raise RuntimeError("Playback command failed")
             
@@ -196,7 +215,6 @@ async def execute_playback(
         
         # If auto-turn-off is enabled, spawn background monitor
         if auto_turn_off:
-            total_seconds = await jellyfin.get_total_runtime_seconds(item_ids)
             asyncio.create_task(
                 monitor_playback_and_turn_off(
                     session_id=tv_session["id"],
@@ -238,6 +256,9 @@ async def schedule_playback(
     days_of_week: str | None = None,
     time_of_day: str | None = None,
     auto_turn_off: bool = True,
+    audio_language: str | None = None,
+    subtitle_enabled: bool | None = None,
+    subtitle_language: str | None = None,
 ) -> str | None:
     """
     Schedule a playback job in APScheduler.
@@ -284,6 +305,9 @@ async def schedule_playback(
                 "target_type": target_type,
                 "target_id": target_id,
                 "auto_turn_off": auto_turn_off,
+                "audio_language": audio_language,
+                "subtitle_enabled": subtitle_enabled,
+                "subtitle_language": subtitle_language,
             },
         )
         logger.info(f"Registered APScheduler job: {job_id} (type={schedule_type}, tz={app_tz})")
@@ -353,6 +377,9 @@ async def resync_pending_jobs() -> None:
                         days_of_week=job.days_of_week,
                         time_of_day=job.time_of_day,
                         auto_turn_off=job.auto_turn_off,
+                        audio_language=job.audio_language,
+                        subtitle_enabled=job.subtitle_enabled,
+                        subtitle_language=job.subtitle_language,
                     )
                     if new_ap_id:
                         job.apscheduler_job_id = new_ap_id

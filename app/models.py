@@ -26,6 +26,16 @@ class ScheduledJob(Base):
     days_of_week: Mapped[str | None] = mapped_column(String(64), nullable=True)  # e.g. "fri,sat" or "mon"
     time_of_day: Mapped[str | None] = mapped_column(String(16), nullable=True)  # e.g. "20:30"
     auto_turn_off: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Runtime & Turn-off Tracking
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    turn_off_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    runtime_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Track Preferences
+    audio_language: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    subtitle_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    subtitle_language: Mapped[str | None] = mapped_column(String(32), nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

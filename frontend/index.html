@@ -109,9 +109,8 @@
                 <!-- Category Filter Pills -->
                 <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
                     <button class="filter-chip chip active px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-300 hover:text-white transition" data-type="Movie,Series" data-category="">All</button>
-                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Series" data-category="">TV Shows</button>
+                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Series" data-category="">TV Shows & Anime</button>
                     <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Movie" data-category="">Movies</button>
-                    <button class="filter-chip chip px-3 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white transition" data-type="Movie,Series" data-category="anime">Anime</button>
                     <button class="px-2.5 py-1.5 text-xs font-medium rounded-md border border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.05] transition" id="refreshMediaBtn" title="Reload library">
                         Refresh
                     </button>
@@ -305,6 +304,56 @@
                     <div class="space-y-1">
                         <label class="block text-xs font-medium text-slate-300" for="scheduleTimeOfDay">Playback Time</label>
                         <input type="time" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-3 py-2 text-xs text-white outline-none" id="scheduleTimeOfDay" value="20:00">
+                    </div>
+                </div>
+
+                <!-- Audio & Subtitle Preferences (Optional) -->
+                <div class="border-t border-white/[0.08] pt-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-medium text-slate-300">Audio & Subtitles</span>
+                            <p class="text-[10px] text-slate-500">Optional: specify audio track and subtitle language</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggleTrackPrefs" class="sr-only peer">
+                            <div class="w-7 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+
+                    <div id="trackPrefsContainer" class="hidden space-y-2.5 pt-1">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-400 mb-1" for="audioLanguageSelect">Preferred Audio Language</label>
+                            <select id="audioLanguageSelect" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-2.5 py-1.5 text-xs text-white outline-none">
+                                <option value="">Default (Item Default)</option>
+                                <option value="jpn">Japanese (日本語)</option>
+                                <option value="eng">English</option>
+                                <option value="heb">Hebrew (עברית)</option>
+                                <option value="fre">French (Français)</option>
+                                <option value="spa">Spanish (Español)</option>
+                                <option value="ger">German (Deutsch)</option>
+                                <option value="ita">Italian (Italiano)</option>
+                                <option value="rus">Russian (Русский)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="text-[11px] font-medium text-slate-400" for="subtitleEnableToggle">Enable Subtitles</label>
+                            <input type="checkbox" id="subtitleEnableToggle" class="rounded bg-[#090a0f] border-white/[0.1] text-indigo-600 focus:ring-0">
+                        </div>
+
+                        <div id="subtitleLanguageGroup" class="hidden">
+                            <label class="block text-[11px] font-medium text-slate-400 mb-1" for="subtitleLanguageSelect">Preferred Subtitle Language</label>
+                            <select id="subtitleLanguageSelect" class="w-full bg-[#090a0f] border border-white/[0.08] focus:border-indigo-500 rounded-md px-2.5 py-1.5 text-xs text-white outline-none">
+                                <option value="">Default (Item Default)</option>
+                                <option value="eng">English</option>
+                                <option value="heb">Hebrew (עברית)</option>
+                                <option value="fre">French (Français)</option>
+                                <option value="spa">Spanish (Español)</option>
+                                <option value="ger">German (Deutsch)</option>
+                                <option value="rus">Russian (Русский)</option>
+                                <option value="jpn">Japanese (日本語)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

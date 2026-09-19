@@ -626,8 +626,32 @@ async def play_playlist_now(playlist_id: str, db: AsyncSession = Depends(get_db)
     if not success:
         raise HTTPException(status_code=502, detail="Failed to start playlist playback")
         
-    # Launch background monitor to turn off TV after playlist finishes
+    # Create active ScheduledJob record so it displays in the Scheduled tab
+    cfg = await get_active_settings(db)
+    app_tz = ZoneInfo(cfg.get("app_timezone", "Asia/Jerusalem"))
+    now_local = datetime.now(app_tz).replace(tzinfo=None)
     total_seconds = await jellyfin.get_total_runtime_seconds(item_ids)
+    turn_off_at = now_local + timedelta(seconds=total_seconds + 60) if total_seconds else None
+
+    job = ScheduledJob(
+        name=pl.name,
+        target_type="playlist",
+        jellyfin_item_id=pl.id,
+        item_type="Playlist",
+        image_tag=None,
+        scheduled_time=now_local,
+        started_at=now_local,
+        turn_off_at=turn_off_at,
+        runtime_minutes=int(total_seconds / 60) if total_seconds else None,
+        schedule_type="once",
+        auto_turn_off=True,
+        status="running",
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    # Launch background monitor to turn off TV after playlist finishes
     asyncio.create_task(
         sched_module.monitor_playback_and_turn_off(
             session_id=tv_session["id"],
@@ -635,7 +659,7 @@ async def play_playlist_now(playlist_id: str, db: AsyncSession = Depends(get_db)
             total_seconds=total_seconds,
             adb=adb,
             jellyfin=jellyfin,
-            job_db_id=f"instant_pl_{playlist_id}",
+            job_db_id=job.id,
         )
     )
     return {"message": f"Playlist '{pl.name}' started on TV"}
@@ -680,6 +704,9 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         days_of_week=data.days_of_week,
         time_of_day=data.time_of_day,
         auto_turn_off=data.auto_turn_off,
+        audio_language=data.audio_language,
+        subtitle_enabled=data.subtitle_enabled,
+        subtitle_language=data.subtitle_language,
         status="pending",
     )
     db.add(job)
@@ -696,6 +723,9 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
         days_of_week=data.days_of_week,
         time_of_day=data.time_of_day,
         auto_turn_off=data.auto_turn_off,
+        audio_language=data.audio_language,
+        subtitle_enabled=data.subtitle_enabled,
+        subtitle_language=data.subtitle_language,
     )
     
     if ap_job_id:
@@ -743,6 +773,12 @@ async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = 
         job.time_of_day = data.time_of_day
     if data.auto_turn_off is not None:
         job.auto_turn_off = data.auto_turn_off
+    if data.audio_language is not None:
+        job.audio_language = data.audio_language
+    if data.subtitle_enabled is not None:
+        job.subtitle_enabled = data.subtitle_enabled
+    if data.subtitle_language is not None:
+        job.subtitle_language = data.subtitle_language
 
     # Calculate scheduled time
     cfg = await get_active_settings(db)
@@ -778,6 +814,9 @@ async def update_schedule(job_id: str, data: ScheduleUpdate, db: AsyncSession = 
         days_of_week=job.days_of_week,
         time_of_day=job.time_of_day,
         auto_turn_off=job.auto_turn_off,
+        audio_language=job.audio_language,
+        subtitle_enabled=job.subtitle_enabled,
+        subtitle_language=job.subtitle_language,
     )
 
     if ap_job_id:
@@ -834,12 +873,48 @@ async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
                 detail="TV session not found after waking TV."
             )
 
-    success = await media.play_on_session(tv_session["id"], data.item_ids)
+    # Calculate runtime and turn-off timestamps
+    app_tz = ZoneInfo(cfg.get("app_timezone", "Asia/Jerusalem"))
+    now_local = datetime.now(app_tz).replace(tzinfo=None)
+    total_seconds = await media.get_total_runtime_seconds(data.item_ids)
+    turn_off_at = now_local + timedelta(seconds=total_seconds + 60) if data.auto_turn_off and total_seconds else None
+
+    # Register active job in database so it shows up in Scheduled tab
+    job = ScheduledJob(
+        name=data.name or (f"Item {data.item_ids[0]}" if data.item_ids else "Instant Playback"),
+        target_type=data.target_type or "media",
+        jellyfin_item_id=data.item_ids[0] if data.item_ids else "",
+        item_type=data.item_type or "Movie",
+        image_tag=data.image_tag,
+        scheduled_time=now_local,
+        started_at=now_local,
+        turn_off_at=turn_off_at,
+        runtime_minutes=int(total_seconds / 60) if total_seconds else None,
+        schedule_type="once",
+        auto_turn_off=data.auto_turn_off,
+        audio_language=data.audio_language,
+        subtitle_enabled=data.subtitle_enabled,
+        subtitle_language=data.subtitle_language,
+        status="running",
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    success = await media.play_on_session(
+        tv_session["id"],
+        data.item_ids,
+        audio_language=data.audio_language,
+        subtitle_enabled=data.subtitle_enabled,
+        subtitle_language=data.subtitle_language,
+    )
     if not success:
+        job.status = "failed"
+        job.error_message = "Playback command failed"
+        await db.commit()
         raise HTTPException(status_code=502, detail="Playback command failed")
 
     if data.auto_turn_off:
-        total_seconds = await media.get_total_runtime_seconds(data.item_ids)
         asyncio.create_task(
             sched_module.monitor_playback_and_turn_off(
                 session_id=tv_session["id"],
@@ -847,10 +922,10 @@ async def play_now(data: PlayNowRequest, db: AsyncSession = Depends(get_db)):
                 total_seconds=total_seconds,
                 adb=tv,
                 jellyfin=media,
-                job_db_id=f"play_now_{datetime.utcnow().timestamp()}",
+                job_db_id=job.id,
             )
         )
-    return {"message": f"Playback started on {tv_session.get('device_name', 'TV')}"}
+    return {"message": f"Playback started on {tv_session.get('device_name', 'TV')}", "job_id": job.id}
 
 
 # --- Media Image Proxy ---

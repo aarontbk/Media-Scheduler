@@ -132,6 +132,12 @@ const elements = {
     scheduleTimeOfDay: document.getElementById('scheduleTimeOfDay'),
     instantPlayBtn: document.getElementById('instantPlayBtn'),
     confirmScheduleBtn: document.getElementById('confirmScheduleBtn'),
+    toggleTrackPrefs: document.getElementById('toggleTrackPrefs'),
+    trackPrefsContainer: document.getElementById('trackPrefsContainer'),
+    audioLanguageSelect: document.getElementById('audioLanguageSelect'),
+    subtitleEnableToggle: document.getElementById('subtitleEnableToggle'),
+    subtitleLanguageGroup: document.getElementById('subtitleLanguageGroup'),
+    subtitleLanguageSelect: document.getElementById('subtitleLanguageSelect'),
 
     // Timeline View
     timelineList: document.getElementById('timelineList'),
@@ -543,11 +549,11 @@ const api = {
         if (!res.ok) throw new Error('Failed to cancel scheduled job');
     },
 
-    async playNow(itemIds, autoTurnOff = true) {
+    async playNow(itemIds, autoTurnOff = true, extra = {}) {
         const res = await fetch('/api/play-now', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_ids: itemIds, auto_turn_off: autoTurnOff }),
+            body: JSON.stringify({ item_ids: itemIds, auto_turn_off: autoTurnOff, ...extra }),
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -1357,6 +1363,18 @@ function openScheduleModal(targetData) {
     const defM = String(defaultTime.getMinutes()).padStart(2, '0');
     elements.scheduleTimeOfDay.value = `${defH}:${defM}`;
 
+    // Reset Track Preferences
+    if (elements.toggleTrackPrefs) {
+        elements.toggleTrackPrefs.checked = false;
+        elements.trackPrefsContainer.classList.add('hidden');
+    }
+    if (elements.audioLanguageSelect) elements.audioLanguageSelect.value = '';
+    if (elements.subtitleEnableToggle) {
+        elements.subtitleEnableToggle.checked = false;
+        elements.subtitleLanguageGroup.classList.add('hidden');
+    }
+    if (elements.subtitleLanguageSelect) elements.subtitleLanguageSelect.value = '';
+
     elements.scheduleModal.classList.remove('hidden');
 }
 
@@ -1414,6 +1432,19 @@ function openEditScheduleModal(job) {
             });
         }
     }
+
+    // Set Track Preferences
+    const hasTrackPrefs = !!(job.audio_language || (job.subtitle_enabled !== null && job.subtitle_enabled !== undefined));
+    if (elements.toggleTrackPrefs) {
+        elements.toggleTrackPrefs.checked = hasTrackPrefs;
+        elements.trackPrefsContainer.classList.toggle('hidden', !hasTrackPrefs);
+    }
+    if (elements.audioLanguageSelect) elements.audioLanguageSelect.value = job.audio_language || '';
+    if (elements.subtitleEnableToggle) {
+        elements.subtitleEnableToggle.checked = !!job.subtitle_enabled;
+        elements.subtitleLanguageGroup.classList.toggle('hidden', !job.subtitle_enabled);
+    }
+    if (elements.subtitleLanguageSelect) elements.subtitleLanguageSelect.value = job.subtitle_language || '';
 
     elements.scheduleModal.classList.remove('hidden');
 }
@@ -1499,8 +1530,15 @@ async function handleConfirmSchedule() {
         }
     }
 
-    elements.confirmScheduleBtn.disabled = true;
-    elements.confirmScheduleBtn.textContent = 'Saving...';
+    const trackPrefs = (elements.toggleTrackPrefs && elements.toggleTrackPrefs.checked) ? {
+        audio_language: elements.audioLanguageSelect?.value || null,
+        subtitle_enabled: elements.subtitleEnableToggle ? elements.subtitleEnableToggle.checked : null,
+        subtitle_language: (elements.subtitleEnableToggle?.checked && elements.subtitleLanguageSelect) ? elements.subtitleLanguageSelect.value || null : null,
+    } : {
+        audio_language: null,
+        subtitle_enabled: null,
+        subtitle_language: null,
+    };
 
     const payload = {
         name: state.selectedMedia.name,
@@ -1513,6 +1551,7 @@ async function handleConfirmSchedule() {
         days_of_week: daysOfWeek,
         time_of_day: timeOfDay,
         auto_turn_off: true,
+        ...trackPrefs,
     };
 
     try {
@@ -1540,14 +1579,28 @@ async function handleInstantPlay() {
     elements.instantPlayBtn.disabled = true;
     elements.instantPlayBtn.textContent = 'Starting...';
 
+    const trackPrefs = (elements.toggleTrackPrefs && elements.toggleTrackPrefs.checked) ? {
+        audio_language: elements.audioLanguageSelect?.value || null,
+        subtitle_enabled: elements.subtitleEnableToggle ? elements.subtitleEnableToggle.checked : null,
+        subtitle_language: (elements.subtitleEnableToggle?.checked && elements.subtitleLanguageSelect) ? elements.subtitleLanguageSelect.value || null : null,
+    } : {};
+
     try {
         if (isPlaylist) {
             await api.playPlaylistNow(state.selectedMedia.id);
         } else {
-            await api.playNow([state.selectedMedia.id], true);
+            await api.playNow([state.selectedMedia.id], true, {
+                name: state.selectedMedia.name,
+                target_type: 'media',
+                item_type: state.selectedMedia.type || 'Movie',
+                image_tag: state.selectedMedia.tag || null,
+                ...trackPrefs,
+            });
         }
         showToast('Playback started on TV', 'success');
         elements.scheduleModal.classList.add('hidden');
+        switchView('timeline');
+        loadTimeline();
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
@@ -1556,10 +1609,46 @@ async function handleInstantPlay() {
     }
 }
 
-// --- Timeline Rendering ---
-async function loadTimeline() {
-    elements.timelineList.innerHTML = '<div class="loading-state py-8 text-center text-xs text-slate-400">Loading scheduled jobs...</div>';
+// --- Timeline Countdown Ticker & Rendering ---
+let countdownInterval = null;
+let timelinePollTimer = null;
 
+function updateCountdowns() {
+    const timerEls = document.querySelectorAll('.turnoff-timer');
+    timerEls.forEach(el => {
+        const turnOffIso = el.dataset.turnOff;
+        const valEl = el.querySelector('.countdown-value');
+        if (!valEl) return;
+        if (!turnOffIso) {
+            valEl.textContent = 'Active (monitoring)';
+            return;
+        }
+        const turnOffTime = new Date(turnOffIso).getTime();
+        const diff = turnOffTime - Date.now();
+        if (diff <= 0) {
+            valEl.textContent = 'Turning off TV shortly...';
+        } else {
+            const totalSec = Math.floor(diff / 1000);
+            const hrs = Math.floor(totalSec / 3600);
+            const mins = Math.floor((totalSec % 3600) / 60);
+            const secs = totalSec % 60;
+            const pad = n => String(n).padStart(2, '0');
+            if (hrs > 0) {
+                valEl.textContent = `${hrs}h ${pad(mins)}m ${pad(secs)}s`;
+            } else {
+                valEl.textContent = `${pad(mins)}m ${pad(secs)}s`;
+            }
+        }
+    });
+}
+
+function startCountdownTicker() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    updateCountdowns();
+    countdownInterval = setInterval(updateCountdowns, 1000);
+}
+
+async function loadTimeline() {
     try {
         const jobs = await api.getSchedules();
         state.scheduledJobs = jobs;
@@ -1572,6 +1661,14 @@ async function loadTimeline() {
         } else {
             elements.pendingCountBadge.classList.add('hidden');
         }
+
+        // If any job is currently running and timeline view is active, poll every 10s
+        if (timelinePollTimer) clearTimeout(timelinePollTimer);
+        if (state.activeView === 'timeline' && jobs.some(j => j.status === 'running')) {
+            timelinePollTimer = setTimeout(() => {
+                if (state.activeView === 'timeline') loadTimeline();
+            }, 10000);
+        }
     } catch (err) {
         elements.timelineList.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Failed to load schedule: ${escapeHtml(err.message)}</p>`;
     }
@@ -1581,14 +1678,29 @@ function renderTimeline(jobs) {
     if (!jobs || jobs.length === 0) {
         elements.timelineList.innerHTML = '';
         elements.emptyTimelineState.classList.remove('hidden');
+        if (countdownInterval) clearInterval(countdownInterval);
         return;
     }
 
     elements.emptyTimelineState.classList.add('hidden');
 
-    elements.timelineList.innerHTML = jobs.map(job => {
+    // Sort: 'running' first, then 'pending' sorted by scheduled_time, then others
+    const sortedJobs = [...jobs].sort((a, b) => {
+        if (a.status === 'running' && b.status !== 'running') return -1;
+        if (b.status === 'running' && a.status !== 'running') return 1;
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (b.status === 'pending' && a.status !== 'pending') return 1;
+        return new Date(a.scheduled_time || 0) - new Date(b.scheduled_time || 0);
+    });
+
+    elements.timelineList.innerHTML = sortedJobs.map(job => {
+        const isRunning = job.status === 'running';
+        const isPending = job.status === 'pending';
+
         let scheduleLabel = '';
-        if (job.schedule_type === 'daily') {
+        if (isRunning) {
+            scheduleLabel = 'Playing Now';
+        } else if (job.schedule_type === 'daily') {
             scheduleLabel = `Daily at ${job.time_of_day || '20:00'}`;
         } else if (job.schedule_type === 'weekly') {
             scheduleLabel = `Weekly (${(job.days_of_week || 'fri').toUpperCase()}) at ${job.time_of_day || '20:00'}`;
@@ -1602,39 +1714,84 @@ function renderTimeline(jobs) {
         const isEpisode = job.item_type === 'Episode' || (job.name && job.name.includes(' - S'));
         let timelinePosterHtml = '';
         if (job.image_tag) {
-            timelinePosterHtml = `<img class="w-10 h-15 object-cover rounded border border-white/[0.08] flex-shrink-0" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
+            timelinePosterHtml = `<img class="w-11 h-16 object-cover rounded-lg border border-white/[0.08] flex-shrink-0" src="${getImageUrl(job.jellyfin_item_id, job.image_tag)}" alt="${escapeHtml(job.name)}">`;
         } else if (isEpisode) {
-            timelinePosterHtml = `<div class="w-10 h-15 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(job.name))}</div>`;
+            timelinePosterHtml = `<div class="w-11 h-16 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0">${escapeHtml(extractEpLabel(job.name))}</div>`;
         } else {
-            timelinePosterHtml = `<div class="w-10 h-15 bg-[#1a1d27] rounded flex items-center justify-center text-[10px] font-bold text-slate-400 flex-shrink-0">${isPlaylist ? 'LIST' : 'MEDIA'}</div>`;
+            timelinePosterHtml = `<div class="w-11 h-16 bg-[#1a1d27] rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400 flex-shrink-0">${isPlaylist ? 'LIST' : 'MEDIA'}</div>`;
         }
 
+        // Track prefs tag
+        let trackPrefsHtml = '';
+        if (job.audio_language || (job.subtitle_enabled !== null && job.subtitle_enabled !== undefined)) {
+            const parts = [];
+            if (job.audio_language) parts.push(`Audio: ${job.audio_language.toUpperCase()}`);
+            if (job.subtitle_enabled === false) {
+                parts.push('Subs: Off');
+            } else if (job.subtitle_enabled === true) {
+                parts.push(job.subtitle_language ? `Subs: ${job.subtitle_language.toUpperCase()}` : 'Subs: On');
+            }
+            if (parts.length > 0) {
+                trackPrefsHtml = `<span class="text-[10px] text-slate-400 bg-white/[0.05] px-1.5 py-0.5 rounded border border-white/[0.08]">${escapeHtml(parts.join(' · '))}</span>`;
+            }
+        }
+
+        // Live turn-off countdown for running jobs or runtime for pending
+        let turnOffHtml = '';
+        if (isRunning) {
+            if (job.auto_turn_off) {
+                turnOffHtml = `
+                    <div class="turnoff-timer text-xs font-semibold text-emerald-400 flex items-center gap-1.5 pt-0.5" data-turn-off="${job.turn_off_at || ''}">
+                        <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span>Auto-off in:</span>
+                        <span class="countdown-value font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-emerald-300">Calculating...</span>
+                    </div>
+                `;
+            } else {
+                turnOffHtml = `<div class="text-[11px] text-slate-400 pt-0.5">Auto-off: Disabled (Manual TV control)</div>`;
+            }
+        } else if (isPending && job.runtime_minutes) {
+            turnOffHtml = `<div class="text-[11px] text-slate-400">Duration: ~${job.runtime_minutes}m ${job.auto_turn_off ? '· Auto-sleep on finish' : ''}</div>`;
+        }
+
+        const cardBg = isRunning 
+            ? 'bg-[#121624] border-indigo-500/40 shadow-lg shadow-indigo-950/40 ring-1 ring-indigo-500/30' 
+            : 'bg-[#11131a] border-white/[0.08]';
+
+        const statusBadgeHtml = isRunning
+            ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>PLAYING NOW</span>`
+            : `<span class="status-badge ${job.status}">${job.status}</span>`;
+
         return `
-        <div class="timeline-card bg-[#11131a] border border-white/[0.08] rounded-xl p-3.5 flex items-center justify-between gap-4" data-id="${job.id}">
-            <div class="flex items-center gap-3 min-w-0">
+        <div class="timeline-card ${cardBg} rounded-xl p-4 flex items-center justify-between gap-4 transition" data-id="${job.id}">
+            <div class="flex items-center gap-3.5 min-w-0">
                 ${timelinePosterHtml}
                 <div class="min-w-0 space-y-1">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <h4 class="text-xs font-semibold text-white truncate">${escapeHtml(job.name)}</h4>
-                        <span class="status-badge ${job.status}">${job.status}</span>
+                        ${statusBadgeHtml}
+                        ${trackPrefsHtml}
                     </div>
                     <div class="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
-                        <span class="text-indigo-400 font-medium">${scheduleLabel}</span>
+                        <span class="${isRunning ? 'text-emerald-400 font-semibold' : 'text-indigo-400 font-medium'}">${scheduleLabel}</span>
                         <span>·</span>
                         <span>${isPlaylist ? 'Playlist' : (job.item_type || 'Media')}</span>
                     </div>
-                    ${job.error_message ? `<div class="text-rose-400 text-[11px]">${escapeHtml(job.error_message)}</div>` : ''}
+                    ${turnOffHtml}
+                    ${job.error_message ? `<div class="text-rose-400 text-[11px] pt-0.5">${escapeHtml(job.error_message)}</div>` : ''}
                 </div>
             </div>
 
             <div class="flex items-center gap-2 flex-shrink-0">
-                <button class="edit-job-btn px-3 py-1.5 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-300 rounded border border-white/[0.08] transition" data-id="${job.id}">Edit</button>
-                <button class="cancel-job-btn px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 rounded border border-rose-500/20 transition" data-id="${job.id}">
-                    ${job.status === 'pending' ? 'Cancel' : 'Delete'}
+                ${!isRunning ? `<button class="edit-job-btn px-3 py-1.5 text-xs font-medium bg-[#1a1d27] hover:bg-[#222634] text-slate-300 rounded border border-white/[0.08] transition" data-id="${job.id}">Edit</button>` : ''}
+                <button class="cancel-job-btn px-3 py-1.5 text-xs font-medium ${isRunning ? 'text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 font-semibold' : 'text-rose-400 hover:bg-rose-500/10 border-rose-500/20'} rounded border transition" data-id="${job.id}">
+                    ${isRunning ? 'Stop Playback' : (isPending ? 'Cancel' : 'Delete')}
                 </button>
             </div>
         </div>
     `;}).join('');
+
+    startCountdownTicker();
 
     elements.timelineList.querySelectorAll('.edit-job-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1992,6 +2149,15 @@ function switchView(viewName) {
         loadPlaylists();
     } else if (viewName === 'timeline') {
         loadTimeline();
+    } else {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (timelinePollTimer) {
+            clearTimeout(timelinePollTimer);
+            timelinePollTimer = null;
+        }
     }
 }
 
@@ -2176,6 +2342,12 @@ function setupEventListeners() {
     elements.presetButtons.forEach(btn => btn.addEventListener('click', () => handlePresetClick(btn)));
     elements.confirmScheduleBtn.addEventListener('click', handleConfirmSchedule);
     elements.instantPlayBtn.addEventListener('click', handleInstantPlay);
+    elements.toggleTrackPrefs?.addEventListener('change', () => {
+        elements.trackPrefsContainer?.classList.toggle('hidden', !elements.toggleTrackPrefs.checked);
+    });
+    elements.subtitleEnableToggle?.addEventListener('change', () => {
+        elements.subtitleLanguageGroup?.classList.toggle('hidden', !elements.subtitleEnableToggle.checked);
+    });
 
     // Timeline Refresh
     elements.refreshTimelineBtn.addEventListener('click', loadTimeline);

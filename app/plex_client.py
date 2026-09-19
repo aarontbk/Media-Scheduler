@@ -375,10 +375,91 @@ class PlexClient(BaseMediaProvider):
             logger.error(f"Unexpected error in find_tv_session: {e}")
             return None
 
+    async def _configure_item_streams(
+        self,
+        item_id: str,
+        audio_language: str | None = None,
+        subtitle_enabled: bool | None = None,
+        subtitle_language: str | None = None,
+    ) -> None:
+        """Set preferred audio and subtitle streams on Plex Media Server before playback."""
+        if not audio_language and subtitle_enabled is None:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(
+                    f"{self.base_url}/library/metadata/{item_id}",
+                    headers=self.headers,
+                )
+                if resp.status_code != 200:
+                    return
+                meta = resp.json().get("MediaContainer", {}).get("Metadata", [])
+                if not meta:
+                    return
+                media_list = meta[0].get("Media", [])
+                if not media_list:
+                    return
+                part_list = media_list[0].get("Part", [])
+                if not part_list:
+                    return
+                part = part_list[0]
+                part_id = part.get("id")
+                if not part_id:
+                    return
+
+                params = {}
+                streams = part.get("Stream", [])
+
+                # Audio stream selection
+                if audio_language:
+                    lang_target = audio_language.strip().lower()
+                    for s in streams:
+                        if s.get("streamType") == 2:  # Audio
+                            s_lang = (s.get("language") or "").lower()
+                            s_code = (s.get("languageCode") or "").lower()
+                            if lang_target in (s_lang, s_code) or lang_target in s_lang:
+                                params["audioStreamID"] = s["id"]
+                                break
+
+                # Subtitle stream selection
+                if subtitle_enabled is False:
+                    params["subtitleStreamID"] = "0"  # Disable subtitles
+                elif subtitle_enabled is True:
+                    if subtitle_language:
+                        sub_target = subtitle_language.strip().lower()
+                        for s in streams:
+                            if s.get("streamType") == 3:  # Subtitle
+                                s_lang = (s.get("language") or "").lower()
+                                s_code = (s.get("languageCode") or "").lower()
+                                if sub_target in (s_lang, s_code) or sub_target in s_lang:
+                                    params["subtitleStreamID"] = s["id"]
+                                    break
+
+                if params:
+                    logger.info(f"Plex: Setting stream preferences on part {part_id}: {params}")
+                    put_resp = await client.put(
+                        f"{self.base_url}/library/parts/{part_id}",
+                        headers=self.headers,
+                        params=params,
+                    )
+                    if put_resp.status_code in (200, 204):
+                        logger.info(f"Plex: Successfully applied stream preferences to part {part_id}")
+                    else:
+                        logger.warning(f"Plex: Setting streams returned {put_resp.status_code}")
+        except Exception as e:
+            logger.warning(f"Plex: Stream configuration failed (proceeding anyway): {e}")
+
     # -------------------------------------------------------------------------
     # Playback — Plex Companion Protocol
     # -------------------------------------------------------------------------
-    async def play_on_session(self, session_id: str, item_ids: list[str]) -> bool:
+    async def play_on_session(
+        self,
+        session_id: str,
+        item_ids: list[str],
+        audio_language: str | None = None,
+        subtitle_enabled: bool | None = None,
+        subtitle_language: str | None = None,
+    ) -> bool:
         """
         Send PlayMedia command via Plex Companion Protocol.
         Tries direct connection to player on port 32500 first,
@@ -388,6 +469,16 @@ class PlexClient(BaseMediaProvider):
             return False
 
         first_id = item_ids[0]
+
+        # Apply track preferences if specified
+        if audio_language or subtitle_enabled is not None:
+            for i_id in item_ids[:3]:
+                await self._configure_item_streams(
+                    i_id,
+                    audio_language=audio_language,
+                    subtitle_enabled=subtitle_enabled,
+                    subtitle_language=subtitle_language,
+                )
 
         # 1. Create a play queue on PMS
         queue_key = await self._create_play_queue(item_ids)

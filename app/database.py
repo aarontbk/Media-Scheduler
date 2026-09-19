@@ -51,6 +51,18 @@ def _migrate_db(sync_conn):
                 cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN time_of_day VARCHAR(16)")
             if "auto_turn_off" not in cols:
                 cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN auto_turn_off BOOLEAN DEFAULT 1")
+            if "started_at" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN started_at DATETIME")
+            if "turn_off_at" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN turn_off_at DATETIME")
+            if "runtime_minutes" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN runtime_minutes INTEGER")
+            if "audio_language" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN audio_language VARCHAR(32)")
+            if "subtitle_enabled" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN subtitle_enabled BOOLEAN")
+            if "subtitle_language" not in cols:
+                cursor.execute("ALTER TABLE scheduled_jobs ADD COLUMN subtitle_language VARCHAR(32)")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Schema migration note: {e}")

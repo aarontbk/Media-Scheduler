@@ -59,6 +59,11 @@ class ScheduleCreate(BaseModel):
     time_of_day: str | None = None  # e.g. "20:30"
     auto_turn_off: bool = True  # Auto-turn off TV after playback finishes
 
+    # Optional Track Preferences
+    audio_language: str | None = None
+    subtitle_enabled: bool | None = None
+    subtitle_language: str | None = None
+
 class ScheduleUpdate(BaseModel):
     name: str | None = None
     scheduled_time: datetime | None = None
@@ -66,6 +71,9 @@ class ScheduleUpdate(BaseModel):
     days_of_week: str | None = None
     time_of_day: str | None = None
     auto_turn_off: bool | None = None
+    audio_language: str | None = None
+    subtitle_enabled: bool | None = None
+    subtitle_language: str | None = None
 
 class ScheduleResponse(BaseModel):
     id: str
@@ -81,6 +89,12 @@ class ScheduleResponse(BaseModel):
     auto_turn_off: bool
     status: str
     error_message: str | None
+    started_at: datetime | None = None
+    turn_off_at: datetime | None = None
+    runtime_minutes: int | None = None
+    audio_language: str | None = None
+    subtitle_enabled: bool | None = None
+    subtitle_language: str | None = None
     created_at: datetime
     
     model_config = {"from_attributes": True}
@@ -249,3 +263,10 @@ class SettingsResponse(BaseModel):
 class PlayNowRequest(BaseModel):
     item_ids: list[str]
     auto_turn_off: bool = True
+    name: str | None = None
+    target_type: str = "media"
+    item_type: str = "Movie"
+    image_tag: str | None = None
+    audio_language: str | None = None
+    subtitle_enabled: bool | None = None
+    subtitle_language: str | None = None

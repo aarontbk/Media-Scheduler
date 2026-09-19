@@ -430,17 +430,54 @@ class JellyfinClient(BaseMediaProvider):
             logger.error(f"Unexpected error in find_tv_session: {e}")
             return None
 
-    async def play_on_session(self, session_id: str, item_ids: list[str]) -> bool:
-        """Send PlayNow command to a session."""
+    async def play_on_session(
+        self,
+        session_id: str,
+        item_ids: list[str],
+        audio_language: str | None = None,
+        subtitle_enabled: bool | None = None,
+        subtitle_language: str | None = None,
+    ) -> bool:
+        """Send PlayNow command to a session with optional audio and subtitle preferences."""
         try:
+            params = {
+                "playCommand": "PlayNow",
+                "itemIds": ",".join(item_ids),
+            }
+            if (audio_language or subtitle_enabled is not None) and item_ids:
+                try:
+                    user_id = await self.get_valid_user_id()
+                    endpoint = f"{self.base_url}/Users/{user_id}/Items/{item_ids[0]}" if user_id else f"{self.base_url}/Items/{item_ids[0]}"
+                    async with httpx.AsyncClient(timeout=6) as c:
+                        r = await c.get(endpoint, headers=self.headers)
+                        if r.status_code == 200:
+                            streams = r.json().get("MediaStreams", [])
+                            if audio_language:
+                                target = audio_language.strip().lower()
+                                for s in streams:
+                                    if s.get("Type") == "Audio":
+                                        lang = (s.get("Language") or "").lower()
+                                        if target in lang or lang in target:
+                                            params["audioStreamIndex"] = s.get("Index")
+                                            break
+                            if subtitle_enabled is False:
+                                params["subtitleStreamIndex"] = -1
+                            elif subtitle_enabled is True and subtitle_language:
+                                target = subtitle_language.strip().lower()
+                                for s in streams:
+                                    if s.get("Type") == "Subtitle":
+                                        lang = (s.get("Language") or "").lower()
+                                        if target in lang or lang in target:
+                                            params["subtitleStreamIndex"] = s.get("Index")
+                                            break
+                except Exception as e:
+                    logger.warning(f"Jellyfin: Could not resolve track preferences: {e}")
+
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(
                     f"{self.base_url}/Sessions/{session_id}/Playing",
                     headers=self.headers,
-                    params={
-                        "playCommand": "PlayNow",
-                        "itemIds": ",".join(item_ids),
-                    },
+                    params=params,
                 )
                 if resp.status_code in (200, 204):
                     logger.info(f"Playback started on session {session_id}")
