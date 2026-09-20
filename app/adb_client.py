@@ -267,8 +267,8 @@ class ADBClient(BaseTVController):
             "monkey", "-p", "com.plexapp.android", "-c", "android.intent.category.LAUNCHER", "1"
         )
         if rc == 0:
-            logger.info(f"Plex app launch command sent to {self.tv_address}. Waiting 5s for Plex to load...")
-            await asyncio.sleep(5)
+            logger.info(f"Plex app launch command sent to {self.tv_address}. Waiting 10s for Plex to load...")
+            await asyncio.sleep(10)
             return True
             
         # 2. Try explicit activities
@@ -281,8 +281,8 @@ class ADBClient(BaseTVController):
                 "am", "start", "-n", act
             )
             if rc == 0:
-                logger.info(f"Plex app launch command sent to {self.tv_address} via {act}. Waiting 5s for Plex to load...")
-                await asyncio.sleep(5)
+                logger.info(f"Plex app launch command sent to {self.tv_address} via {act}. Waiting 10s for Plex to load...")
+                await asyncio.sleep(10)
                 return True
 
         logger.warning(f"Launch Plex failed: {stderr}")
